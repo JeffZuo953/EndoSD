@@ -1,0 +1,2442 @@
+pretrained.cls_token: 1024 params
+  Mean: 0.000105
+  Std: 0.006120
+  Min: -0.027230
+  Max: 0.063416
+
+pretrained.pos_embed: 1402880 params
+  Mean: 0.000033
+  Std: 0.007920
+  Min: -0.147585
+  Max: 0.161331
+
+pretrained.mask_token: 1024 params
+  Mean: 0.000000
+  Std: 0.000000
+  Min: 0.000000
+  Max: 0.000000
+
+pretrained.patch_embed.proj.weight: 602112 params
+  Mean: -0.000023
+  Std: 0.008260
+  Min: -0.051028
+  Max: 0.047224
+
+pretrained.patch_embed.proj.bias: 1024 params
+  Mean: 0.001270
+  Std: 0.041921
+  Min: -0.585973
+  Max: 0.524408
+
+pretrained.blocks.0.norm1.weight: 1024 params
+  Mean: 0.071429
+  Std: 0.264788
+  Min: -1.828170
+  Max: 2.487090
+
+pretrained.blocks.0.norm1.bias: 1024 params
+  Mean: 0.001436
+  Std: 0.091053
+  Min: -1.077045
+  Max: 1.106308
+
+pretrained.blocks.0.attn.qkv.weight: 3145728 params
+  Mean: -0.000004
+  Std: 0.011741
+  Min: -0.337815
+  Max: 0.334952
+
+pretrained.blocks.0.attn.qkv.bias: 3072 params
+  Mean: -0.019166
+  Std: 1.730301
+  Min: -9.366066
+  Max: 9.250385
+
+pretrained.blocks.0.attn.proj.weight: 1048576 params
+  Mean: -0.000004
+  Std: 0.007824
+  Min: -0.147450
+  Max: 0.139379
+
+pretrained.blocks.0.attn.proj.bias: 1024 params
+  Mean: -0.004475
+  Std: 0.082520
+  Min: -1.550121
+  Max: 0.247883
+
+pretrained.blocks.0.ls1.gamma: 1024 params
+  Mean: 0.001497
+  Std: 0.090148
+  Min: -1.252431
+  Max: 0.645298
+
+pretrained.blocks.0.norm2.weight: 1024 params
+  Mean: 0.657769
+  Std: 0.574655
+  Min: -0.299827
+  Max: 4.558154
+
+pretrained.blocks.0.norm2.bias: 1024 params
+  Mean: 0.012557
+  Std: 0.154141
+  Min: -1.010895
+  Max: 1.657421
+
+pretrained.blocks.0.mlp.fc1.weight: 4194304 params
+  Mean: 0.000008
+  Std: 0.011870
+  Min: -0.229658
+  Max: 0.281788
+
+pretrained.blocks.0.mlp.fc1.bias: 4096 params
+  Mean: -1.016853
+  Std: 0.291224
+  Min: -1.497852
+  Max: 0.576659
+
+pretrained.blocks.0.mlp.fc2.weight: 4194304 params
+  Mean: 0.000003
+  Std: 0.009143
+  Min: -0.219338
+  Max: 0.301450
+
+pretrained.blocks.0.mlp.fc2.bias: 1024 params
+  Mean: 0.000073
+  Std: 0.097405
+  Min: -1.548417
+  Max: 1.218003
+
+pretrained.blocks.0.ls2.gamma: 1024 params
+  Mean: -0.003141
+  Std: 0.107656
+  Min: -1.232642
+  Max: 0.878048
+
+pretrained.blocks.1.norm1.weight: 1024 params
+  Mean: 0.206844
+  Std: 0.718629
+  Min: -0.856957
+  Max: 6.176193
+
+pretrained.blocks.1.norm1.bias: 1024 params
+  Mean: 0.004588
+  Std: 0.154228
+  Min: -2.511133
+  Max: 2.875619
+
+pretrained.blocks.1.attn.qkv.weight: 3145728 params
+  Mean: -0.000000
+  Std: 0.007839
+  Min: -0.346324
+  Max: 0.307237
+
+pretrained.blocks.1.attn.qkv.bias: 3072 params
+  Mean: 0.049470
+  Std: 1.232988
+  Min: -10.176927
+  Max: 10.201214
+
+pretrained.blocks.1.attn.proj.weight: 1048576 params
+  Mean: 0.000010
+  Std: 0.008439
+  Min: -0.198064
+  Max: 0.275286
+
+pretrained.blocks.1.attn.proj.bias: 1024 params
+  Mean: 0.000706
+  Std: 0.076119
+  Min: -1.176907
+  Max: 0.375451
+
+pretrained.blocks.1.ls1.gamma: 1024 params
+  Mean: 0.006361
+  Std: 0.162118
+  Min: -2.084327
+  Max: 1.417072
+
+pretrained.blocks.1.norm2.weight: 1024 params
+  Mean: 0.630430
+  Std: 0.590951
+  Min: -0.001694
+  Max: 4.785295
+
+pretrained.blocks.1.norm2.bias: 1024 params
+  Mean: 0.017148
+  Std: 0.118468
+  Min: -1.837724
+  Max: 1.095206
+
+pretrained.blocks.1.mlp.fc1.weight: 4194304 params
+  Mean: -0.000145
+  Std: 0.012900
+  Min: -0.323184
+  Max: 0.275812
+
+pretrained.blocks.1.mlp.fc1.bias: 4096 params
+  Mean: -1.552007
+  Std: 1.055786
+  Min: -3.338020
+  Max: 0.108478
+
+pretrained.blocks.1.mlp.fc2.weight: 4194304 params
+  Mean: -0.000002
+  Std: 0.013004
+  Min: -0.210658
+  Max: 0.251885
+
+pretrained.blocks.1.mlp.fc2.bias: 1024 params
+  Mean: 0.004898
+  Std: 0.134949
+  Min: -1.149126
+  Max: 1.223763
+
+pretrained.blocks.1.ls2.gamma: 1024 params
+  Mean: 0.003760
+  Std: 0.136552
+  Min: -1.252829
+  Max: 0.495998
+
+pretrained.blocks.2.norm1.weight: 1024 params
+  Mean: 0.458753
+  Std: 0.688260
+  Min: -0.778697
+  Max: 3.418140
+
+pretrained.blocks.2.norm1.bias: 1024 params
+  Mean: 0.004255
+  Std: 0.146411
+  Min: -2.061194
+  Max: 2.286726
+
+pretrained.blocks.2.attn.qkv.weight: 3145728 params
+  Mean: 0.000000
+  Std: 0.011365
+  Min: -0.245327
+  Max: 0.250481
+
+pretrained.blocks.2.attn.qkv.bias: 3072 params
+  Mean: -0.020622
+  Std: 0.694861
+  Min: -5.181278
+  Max: 4.973638
+
+pretrained.blocks.2.attn.proj.weight: 1048576 params
+  Mean: 0.000016
+  Std: 0.012306
+  Min: -0.128523
+  Max: 0.150605
+
+pretrained.blocks.2.attn.proj.bias: 1024 params
+  Mean: -0.002200
+  Std: 0.082070
+  Min: -1.025881
+  Max: 0.612720
+
+pretrained.blocks.2.ls1.gamma: 1024 params
+  Mean: 0.004337
+  Std: 0.117534
+  Min: -0.567431
+  Max: 1.744377
+
+pretrained.blocks.2.norm2.weight: 1024 params
+  Mean: 1.018024
+  Std: 0.684827
+  Min: -0.084082
+  Max: 3.271485
+
+pretrained.blocks.2.norm2.bias: 1024 params
+  Mean: 0.001898
+  Std: 0.137917
+  Min: -1.678202
+  Max: 1.992704
+
+pretrained.blocks.2.mlp.fc1.weight: 4194304 params
+  Mean: 0.000226
+  Std: 0.013292
+  Min: -0.243800
+  Max: 0.202906
+
+pretrained.blocks.2.mlp.fc1.bias: 4096 params
+  Mean: -1.345526
+  Std: 0.868172
+  Min: -3.008191
+  Max: 0.193161
+
+pretrained.blocks.2.mlp.fc2.weight: 4194304 params
+  Mean: 0.000001
+  Std: 0.012263
+  Min: -0.245010
+  Max: 0.295778
+
+pretrained.blocks.2.mlp.fc2.bias: 1024 params
+  Mean: 0.002041
+  Std: 0.145728
+  Min: -1.159208
+  Max: 1.227329
+
+pretrained.blocks.2.ls2.gamma: 1024 params
+  Mean: 0.005952
+  Std: 0.121905
+  Min: -0.422794
+  Max: 1.500617
+
+pretrained.blocks.3.norm1.weight: 1024 params
+  Mean: 0.860955
+  Std: 0.571014
+  Min: -0.261288
+  Max: 3.057322
+
+pretrained.blocks.3.norm1.bias: 1024 params
+  Mean: 0.002291
+  Std: 0.130163
+  Min: -1.887404
+  Max: 1.930393
+
+pretrained.blocks.3.attn.qkv.weight: 3145728 params
+  Mean: 0.000001
+  Std: 0.015104
+  Min: -0.275621
+  Max: 0.247758
+
+pretrained.blocks.3.attn.qkv.bias: 3072 params
+  Mean: 0.000574
+  Std: 0.499680
+  Min: -3.424248
+  Max: 3.608754
+
+pretrained.blocks.3.attn.proj.weight: 1048576 params
+  Mean: 0.000019
+  Std: 0.012971
+  Min: -0.180022
+  Max: 0.185086
+
+pretrained.blocks.3.attn.proj.bias: 1024 params
+  Mean: -0.003875
+  Std: 0.102354
+  Min: -1.807385
+  Max: 0.768948
+
+pretrained.blocks.3.ls1.gamma: 1024 params
+  Mean: 0.010544
+  Std: 0.143140
+  Min: -0.564101
+  Max: 2.542591
+
+pretrained.blocks.3.norm2.weight: 1024 params
+  Mean: 1.528003
+  Std: 0.913723
+  Min: -0.125155
+  Max: 5.735446
+
+pretrained.blocks.3.norm2.bias: 1024 params
+  Mean: -0.021108
+  Std: 0.205846
+  Min: -2.402083
+  Max: 3.330557
+
+pretrained.blocks.3.mlp.fc1.weight: 4194304 params
+  Mean: 0.000023
+  Std: 0.013871
+  Min: -0.279835
+  Max: 0.255888
+
+pretrained.blocks.3.mlp.fc1.bias: 4096 params
+  Mean: -1.057512
+  Std: 0.563625
+  Min: -2.914711
+  Max: 0.602607
+
+pretrained.blocks.3.mlp.fc2.weight: 4194304 params
+  Mean: 0.000018
+  Std: 0.013112
+  Min: -0.301812
+  Max: 0.393553
+
+pretrained.blocks.3.mlp.fc2.bias: 1024 params
+  Mean: 0.002953
+  Std: 0.190812
+  Min: -1.937217
+  Max: 1.918765
+
+pretrained.blocks.3.ls2.gamma: 1024 params
+  Mean: 0.004796
+  Std: 0.096293
+  Min: -0.346859
+  Max: 1.083966
+
+pretrained.blocks.4.norm1.weight: 1024 params
+  Mean: 0.757100
+  Std: 0.785401
+  Min: -0.012304
+  Max: 7.823449
+
+pretrained.blocks.4.norm1.bias: 1024 params
+  Mean: -0.015400
+  Std: 0.154082
+  Min: -1.776373
+  Max: 2.832793
+
+pretrained.blocks.4.attn.qkv.weight: 3145728 params
+  Mean: -0.000022
+  Std: 0.014143
+  Min: -0.339965
+  Max: 0.248860
+
+pretrained.blocks.4.attn.qkv.bias: 3072 params
+  Mean: 0.016430
+  Std: 0.543000
+  Min: -3.504519
+  Max: 4.009543
+
+pretrained.blocks.4.attn.proj.weight: 1048576 params
+  Mean: -0.000005
+  Std: 0.012181
+  Min: -0.117255
+  Max: 0.145590
+
+pretrained.blocks.4.attn.proj.bias: 1024 params
+  Mean: 0.000182
+  Std: 0.092552
+  Min: -0.631856
+  Max: 1.089036
+
+pretrained.blocks.4.ls1.gamma: 1024 params
+  Mean: 0.006299
+  Std: 0.157645
+  Min: -0.946483
+  Max: 2.230351
+
+pretrained.blocks.4.norm2.weight: 1024 params
+  Mean: 1.103295
+  Std: 0.427772
+  Min: -0.003131
+  Max: 3.016260
+
+pretrained.blocks.4.norm2.bias: 1024 params
+  Mean: -0.005771
+  Std: 0.179878
+  Min: -2.135113
+  Max: 3.552301
+
+pretrained.blocks.4.mlp.fc1.weight: 4194304 params
+  Mean: -0.000003
+  Std: 0.013807
+  Min: -0.346179
+  Max: 0.338313
+
+pretrained.blocks.4.mlp.fc1.bias: 4096 params
+  Mean: -0.990563
+  Std: 0.506826
+  Min: -3.096845
+  Max: 0.238321
+
+pretrained.blocks.4.mlp.fc2.weight: 4194304 params
+  Mean: -0.000000
+  Std: 0.013095
+  Min: -0.325056
+  Max: 0.466086
+
+pretrained.blocks.4.mlp.fc2.bias: 1024 params
+  Mean: 0.000902
+  Std: 0.117633
+  Min: -0.773504
+  Max: 1.016055
+
+pretrained.blocks.4.ls2.gamma: 1024 params
+  Mean: 0.001700
+  Std: 0.117188
+  Min: -0.357614
+  Max: 1.261039
+
+pretrained.blocks.5.norm1.weight: 1024 params
+  Mean: 1.115804
+  Std: 0.572677
+  Min: -0.238764
+  Max: 2.634094
+
+pretrained.blocks.5.norm1.bias: 1024 params
+  Mean: -0.003820
+  Std: 0.111583
+  Min: -1.194940
+  Max: 1.729370
+
+pretrained.blocks.5.attn.qkv.weight: 3145728 params
+  Mean: 0.000004
+  Std: 0.015063
+  Min: -0.252039
+  Max: 0.203815
+
+pretrained.blocks.5.attn.qkv.bias: 3072 params
+  Mean: 0.015987
+  Std: 0.441211
+  Min: -4.693397
+  Max: 4.288954
+
+pretrained.blocks.5.attn.proj.weight: 1048576 params
+  Mean: 0.000003
+  Std: 0.013058
+  Min: -0.154579
+  Max: 0.147218
+
+pretrained.blocks.5.attn.proj.bias: 1024 params
+  Mean: -0.002847
+  Std: 0.073950
+  Min: -1.481132
+  Max: 0.527079
+
+pretrained.blocks.5.ls1.gamma: 1024 params
+  Mean: 0.012942
+  Std: 0.120982
+  Min: -1.596298
+  Max: 0.358539
+
+pretrained.blocks.5.norm2.weight: 1024 params
+  Mean: 1.754002
+  Std: 0.879205
+  Min: -0.003430
+  Max: 3.812210
+
+pretrained.blocks.5.norm2.bias: 1024 params
+  Mean: -0.017315
+  Std: 0.164451
+  Min: -1.629535
+  Max: 2.936372
+
+pretrained.blocks.5.mlp.fc1.weight: 4194304 params
+  Mean: 0.000016
+  Std: 0.013489
+  Min: -0.218637
+  Max: 0.246228
+
+pretrained.blocks.5.mlp.fc1.bias: 4096 params
+  Mean: -1.238257
+  Std: 0.730177
+  Min: -3.173540
+  Max: 0.707679
+
+pretrained.blocks.5.mlp.fc2.weight: 4194304 params
+  Mean: 0.000053
+  Std: 0.012530
+  Min: -0.269184
+  Max: 0.237052
+
+pretrained.blocks.5.mlp.fc2.bias: 1024 params
+  Mean: -0.000916
+  Std: 0.169005
+  Min: -0.610465
+  Max: 1.776910
+
+pretrained.blocks.5.ls2.gamma: 1024 params
+  Mean: -0.001755
+  Std: 0.108514
+  Min: -1.583621
+  Max: 0.360414
+
+pretrained.blocks.6.norm1.weight: 1024 params
+  Mean: 1.039403
+  Std: 0.632937
+  Min: 0.000015
+  Max: 6.810466
+
+pretrained.blocks.6.norm1.bias: 1024 params
+  Mean: -0.023668
+  Std: 0.148904
+  Min: -0.535547
+  Max: 2.871468
+
+pretrained.blocks.6.attn.qkv.weight: 3145728 params
+  Mean: 0.000008
+  Std: 0.014789
+  Min: -0.198189
+  Max: 0.176179
+
+pretrained.blocks.6.attn.qkv.bias: 3072 params
+  Mean: -0.005391
+  Std: 0.460579
+  Min: -3.930255
+  Max: 4.308281
+
+pretrained.blocks.6.attn.proj.weight: 1048576 params
+  Mean: 0.000005
+  Std: 0.012832
+  Min: -0.190840
+  Max: 0.154784
+
+pretrained.blocks.6.attn.proj.bias: 1024 params
+  Mean: -0.000528
+  Std: 0.104348
+  Min: -1.860515
+  Max: 0.886195
+
+pretrained.blocks.6.ls1.gamma: 1024 params
+  Mean: 0.010079
+  Std: 0.143212
+  Min: -1.397488
+  Max: 0.646551
+
+pretrained.blocks.6.norm2.weight: 1024 params
+  Mean: 1.312654
+  Std: 0.370362
+  Min: -0.000847
+  Max: 3.426889
+
+pretrained.blocks.6.norm2.bias: 1024 params
+  Mean: -0.007411
+  Std: 0.159044
+  Min: -1.898888
+  Max: 3.214574
+
+pretrained.blocks.6.mlp.fc1.weight: 4194304 params
+  Mean: -0.000046
+  Std: 0.013896
+  Min: -0.222053
+  Max: 0.209787
+
+pretrained.blocks.6.mlp.fc1.bias: 4096 params
+  Mean: -0.936768
+  Std: 0.386098
+  Min: -3.126690
+  Max: 0.567709
+
+pretrained.blocks.6.mlp.fc2.weight: 4194304 params
+  Mean: -0.000004
+  Std: 0.012657
+  Min: -0.233495
+  Max: 0.312867
+
+pretrained.blocks.6.mlp.fc2.bias: 1024 params
+  Mean: 0.001097
+  Std: 0.118650
+  Min: -0.502219
+  Max: 1.195725
+
+pretrained.blocks.6.ls2.gamma: 1024 params
+  Mean: -0.002616
+  Std: 0.106752
+  Min: -0.249604
+  Max: 0.787658
+
+pretrained.blocks.7.norm1.weight: 1024 params
+  Mean: 1.178687
+  Std: 0.605302
+  Min: -0.000063
+  Max: 3.946710
+
+pretrained.blocks.7.norm1.bias: 1024 params
+  Mean: 0.000027
+  Std: 0.097038
+  Min: -1.310967
+  Max: 1.482388
+
+pretrained.blocks.7.attn.qkv.weight: 3145728 params
+  Mean: -0.000003
+  Std: 0.014997
+  Min: -0.181777
+  Max: 0.189471
+
+pretrained.blocks.7.attn.qkv.bias: 3072 params
+  Mean: -0.001530
+  Std: 0.444444
+  Min: -3.976035
+  Max: 3.847426
+
+pretrained.blocks.7.attn.proj.weight: 1048576 params
+  Mean: 0.000000
+  Std: 0.013108
+  Min: -0.159296
+  Max: 0.125952
+
+pretrained.blocks.7.attn.proj.bias: 1024 params
+  Mean: 0.002067
+  Std: 0.054886
+  Min: -0.610989
+  Max: 0.583392
+
+pretrained.blocks.7.ls1.gamma: 1024 params
+  Mean: 0.011270
+  Std: 0.134449
+  Min: -1.018748
+  Max: 2.235241
+
+pretrained.blocks.7.norm2.weight: 1024 params
+  Mean: 1.932929
+  Std: 1.206513
+  Min: -0.000615
+  Max: 4.738881
+
+pretrained.blocks.7.norm2.bias: 1024 params
+  Mean: -0.007896
+  Std: 0.116831
+  Min: -0.603411
+  Max: 1.971314
+
+pretrained.blocks.7.mlp.fc1.weight: 4194304 params
+  Mean: -0.000144
+  Std: 0.013776
+  Min: -0.274780
+  Max: 0.259933
+
+pretrained.blocks.7.mlp.fc1.bias: 4096 params
+  Mean: -0.869007
+  Std: 0.508892
+  Min: -3.997226
+  Max: -0.077599
+
+pretrained.blocks.7.mlp.fc2.weight: 4194304 params
+  Mean: -0.000014
+  Std: 0.012499
+  Min: -0.188414
+  Max: 0.220269
+
+pretrained.blocks.7.mlp.fc2.bias: 1024 params
+  Mean: 0.003037
+  Std: 0.169958
+  Min: -0.623605
+  Max: 2.417014
+
+pretrained.blocks.7.ls2.gamma: 1024 params
+  Mean: 0.001547
+  Std: 0.109209
+  Min: -0.934311
+  Max: 0.486758
+
+pretrained.blocks.8.norm1.weight: 1024 params
+  Mean: 1.062012
+  Std: 0.663870
+  Min: 0.145833
+  Max: 7.003616
+
+pretrained.blocks.8.norm1.bias: 1024 params
+  Mean: -0.002688
+  Std: 0.154498
+  Min: -1.542370
+  Max: 2.465522
+
+pretrained.blocks.8.attn.qkv.weight: 3145728 params
+  Mean: -0.000020
+  Std: 0.015355
+  Min: -0.240883
+  Max: 0.248795
+
+pretrained.blocks.8.attn.qkv.bias: 3072 params
+  Mean: -0.015777
+  Std: 1.176509
+  Min: -15.878038
+  Max: 12.876470
+
+pretrained.blocks.8.attn.proj.weight: 1048576 params
+  Mean: 0.000021
+  Std: 0.013389
+  Min: -0.138219
+  Max: 0.149720
+
+pretrained.blocks.8.attn.proj.bias: 1024 params
+  Mean: 0.001163
+  Std: 0.122729
+  Min: -2.099245
+  Max: 1.948464
+
+pretrained.blocks.8.ls1.gamma: 1024 params
+  Mean: 0.019128
+  Std: 0.156467
+  Min: -1.348379
+  Max: 0.457544
+
+pretrained.blocks.8.norm2.weight: 1024 params
+  Mean: 1.347513
+  Std: 0.434918
+  Min: -0.000461
+  Max: 2.488030
+
+pretrained.blocks.8.norm2.bias: 1024 params
+  Mean: -0.004916
+  Std: 0.133154
+  Min: -0.398413
+  Max: 2.335343
+
+pretrained.blocks.8.mlp.fc1.weight: 4194304 params
+  Mean: -0.000049
+  Std: 0.013672
+  Min: -0.203194
+  Max: 0.222612
+
+pretrained.blocks.8.mlp.fc1.bias: 4096 params
+  Mean: -0.872065
+  Std: 0.411989
+  Min: -3.600347
+  Max: 0.169251
+
+pretrained.blocks.8.mlp.fc2.weight: 4194304 params
+  Mean: 0.000003
+  Std: 0.012513
+  Min: -0.198161
+  Max: 0.199320
+
+pretrained.blocks.8.mlp.fc2.bias: 1024 params
+  Mean: 0.000498
+  Std: 0.171454
+  Min: -1.855297
+  Max: 2.148298
+
+pretrained.blocks.8.ls2.gamma: 1024 params
+  Mean: 0.002889
+  Std: 0.149990
+  Min: -0.302250
+  Max: 1.261676
+
+pretrained.blocks.9.norm1.weight: 1024 params
+  Mean: 0.969939
+  Std: 0.610408
+  Min: 0.000261
+  Max: 7.401937
+
+pretrained.blocks.9.norm1.bias: 1024 params
+  Mean: 0.001175
+  Std: 0.141549
+  Min: -1.599403
+  Max: 1.982589
+
+pretrained.blocks.9.attn.qkv.weight: 3145728 params
+  Mean: 0.000012
+  Std: 0.015437
+  Min: -0.206510
+  Max: 0.251349
+
+pretrained.blocks.9.attn.qkv.bias: 3072 params
+  Mean: 0.017406
+  Std: 0.794434
+  Min: -7.820261
+  Max: 11.235236
+
+pretrained.blocks.9.attn.proj.weight: 1048576 params
+  Mean: -0.000003
+  Std: 0.013617
+  Min: -0.191983
+  Max: 0.125831
+
+pretrained.blocks.9.attn.proj.bias: 1024 params
+  Mean: -0.003365
+  Std: 0.104371
+  Min: -1.759984
+  Max: 1.483650
+
+pretrained.blocks.9.ls1.gamma: 1024 params
+  Mean: 0.019264
+  Std: 0.222508
+  Min: -2.205267
+  Max: 1.649529
+
+pretrained.blocks.9.norm2.weight: 1024 params
+  Mean: 1.353092
+  Std: 0.386537
+  Min: -0.000654
+  Max: 2.587679
+
+pretrained.blocks.9.norm2.bias: 1024 params
+  Mean: 0.004843
+  Std: 0.142509
+  Min: -0.953284
+  Max: 2.201009
+
+pretrained.blocks.9.mlp.fc1.weight: 4194304 params
+  Mean: -0.000024
+  Std: 0.013815
+  Min: -0.338153
+  Max: 0.368311
+
+pretrained.blocks.9.mlp.fc1.bias: 4096 params
+  Mean: -0.915320
+  Std: 0.374772
+  Min: -3.352394
+  Max: 0.132067
+
+pretrained.blocks.9.mlp.fc2.weight: 4194304 params
+  Mean: 0.000027
+  Std: 0.012425
+  Min: -0.267331
+  Max: 0.431267
+
+pretrained.blocks.9.mlp.fc2.bias: 1024 params
+  Mean: 0.003149
+  Std: 0.154475
+  Min: -0.449285
+  Max: 2.103655
+
+pretrained.blocks.9.ls2.gamma: 1024 params
+  Mean: 0.004636
+  Std: 0.171256
+  Min: -0.700448
+  Max: 0.661209
+
+pretrained.blocks.10.norm1.weight: 1024 params
+  Mean: 1.244660
+  Std: 0.341262
+  Min: -0.000121
+  Max: 4.114826
+
+pretrained.blocks.10.norm1.bias: 1024 params
+  Mean: 0.006867
+  Std: 0.157765
+  Min: -2.512697
+  Max: 1.285622
+
+pretrained.blocks.10.attn.qkv.weight: 3145728 params
+  Mean: -0.000020
+  Std: 0.015269
+  Min: -0.172180
+  Max: 0.195048
+
+pretrained.blocks.10.attn.qkv.bias: 3072 params
+  Mean: 0.016350
+  Std: 1.310761
+  Min: -14.392218
+  Max: 15.735837
+
+pretrained.blocks.10.attn.proj.weight: 1048576 params
+  Mean: -0.000012
+  Std: 0.013505
+  Min: -0.154822
+  Max: 0.115338
+
+pretrained.blocks.10.attn.proj.bias: 1024 params
+  Mean: 0.003738
+  Std: 0.136710
+  Min: -2.050483
+  Max: 2.646176
+
+pretrained.blocks.10.ls1.gamma: 1024 params
+  Mean: 0.010466
+  Std: 0.193490
+  Min: -0.378078
+  Max: 0.583860
+
+pretrained.blocks.10.norm2.weight: 1024 params
+  Mean: 1.301444
+  Std: 0.348974
+  Min: -0.145150
+  Max: 2.422082
+
+pretrained.blocks.10.norm2.bias: 1024 params
+  Mean: -0.000385
+  Std: 0.138972
+  Min: -0.700657
+  Max: 2.202767
+
+pretrained.blocks.10.mlp.fc1.weight: 4194304 params
+  Mean: -0.000010
+  Std: 0.014090
+  Min: -0.285297
+  Max: 0.265003
+
+pretrained.blocks.10.mlp.fc1.bias: 4096 params
+  Mean: -0.882380
+  Std: 0.314806
+  Min: -3.403611
+  Max: 0.206174
+
+pretrained.blocks.10.mlp.fc2.weight: 4194304 params
+  Mean: 0.000047
+  Std: 0.012419
+  Min: -0.334352
+  Max: 0.269389
+
+pretrained.blocks.10.mlp.fc2.bias: 1024 params
+  Mean: 0.009425
+  Std: 0.170737
+  Min: -0.568362
+  Max: 2.444201
+
+pretrained.blocks.10.ls2.gamma: 1024 params
+  Mean: 0.002356
+  Std: 0.209778
+  Min: -0.679331
+  Max: 0.928025
+
+pretrained.blocks.11.norm1.weight: 1024 params
+  Mean: 1.124225
+  Std: 0.292033
+  Min: 0.148015
+  Max: 3.417069
+
+pretrained.blocks.11.norm1.bias: 1024 params
+  Mean: 0.004437
+  Std: 0.122748
+  Min: -1.886644
+  Max: 1.056397
+
+pretrained.blocks.11.attn.qkv.weight: 3145728 params
+  Mean: 0.000000
+  Std: 0.015361
+  Min: -0.250582
+  Max: 0.219472
+
+pretrained.blocks.11.attn.qkv.bias: 3072 params
+  Mean: -0.004833
+  Std: 0.497885
+  Min: -7.877206
+  Max: 6.597147
+
+pretrained.blocks.11.attn.proj.weight: 1048576 params
+  Mean: -0.000010
+  Std: 0.013464
+  Min: -0.121422
+  Max: 0.116187
+
+pretrained.blocks.11.attn.proj.bias: 1024 params
+  Mean: -0.003093
+  Std: 0.148561
+  Min: -2.851105
+  Max: 2.676259
+
+pretrained.blocks.11.ls1.gamma: 1024 params
+  Mean: 0.023325
+  Std: 0.239062
+  Min: -0.489709
+  Max: 1.093813
+
+pretrained.blocks.11.norm2.weight: 1024 params
+  Mean: 1.338301
+  Std: 0.311120
+  Min: 0.000751
+  Max: 2.889613
+
+pretrained.blocks.11.norm2.bias: 1024 params
+  Mean: -0.001496
+  Std: 0.168978
+  Min: -0.751742
+  Max: 2.206289
+
+pretrained.blocks.11.mlp.fc1.weight: 4194304 params
+  Mean: -0.000062
+  Std: 0.014089
+  Min: -0.259356
+  Max: 0.320928
+
+pretrained.blocks.11.mlp.fc1.bias: 4096 params
+  Mean: -0.919353
+  Std: 0.303575
+  Min: -2.977098
+  Max: 0.429234
+
+pretrained.blocks.11.mlp.fc2.weight: 4194304 params
+  Mean: -0.000050
+  Std: 0.012371
+  Min: -0.245905
+  Max: 0.267247
+
+pretrained.blocks.11.mlp.fc2.bias: 1024 params
+  Mean: -0.010193
+  Std: 0.162903
+  Min: -2.409364
+  Max: 1.076578
+
+pretrained.blocks.11.ls2.gamma: 1024 params
+  Mean: 0.010551
+  Std: 0.247650
+  Min: -1.125649
+  Max: 0.572993
+
+pretrained.blocks.12.norm1.weight: 1024 params
+  Mean: 1.161188
+  Std: 0.263045
+  Min: 0.148346
+  Max: 3.679093
+
+pretrained.blocks.12.norm1.bias: 1024 params
+  Mean: 0.009240
+  Std: 0.144636
+  Min: -1.427543
+  Max: 1.739169
+
+pretrained.blocks.12.attn.qkv.weight: 3145728 params
+  Mean: 0.000003
+  Std: 0.015600
+  Min: -0.222334
+  Max: 0.168826
+
+pretrained.blocks.12.attn.qkv.bias: 3072 params
+  Mean: 0.001134
+  Std: 0.467098
+  Min: -5.280769
+  Max: 4.825987
+
+pretrained.blocks.12.attn.proj.weight: 1048576 params
+  Mean: -0.000011
+  Std: 0.013687
+  Min: -0.131819
+  Max: 0.122721
+
+pretrained.blocks.12.attn.proj.bias: 1024 params
+  Mean: -0.001255
+  Std: 0.146616
+  Min: -2.229786
+  Max: 2.623855
+
+pretrained.blocks.12.ls1.gamma: 1024 params
+  Mean: 0.035253
+  Std: 0.306173
+  Min: -0.693731
+  Max: 1.238396
+
+pretrained.blocks.12.norm2.weight: 1024 params
+  Mean: 1.263322
+  Std: 0.253972
+  Min: 0.175039
+  Max: 3.532490
+
+pretrained.blocks.12.norm2.bias: 1024 params
+  Mean: 0.010657
+  Std: 0.226779
+  Min: -1.821287
+  Max: 1.969932
+
+pretrained.blocks.12.mlp.fc1.weight: 4194304 params
+  Mean: -0.000166
+  Std: 0.014348
+  Min: -0.264129
+  Max: 0.346069
+
+pretrained.blocks.12.mlp.fc1.bias: 4096 params
+  Mean: -0.985164
+  Std: 0.339700
+  Min: -2.757131
+  Max: 0.823911
+
+pretrained.blocks.12.mlp.fc2.weight: 4194304 params
+  Mean: -0.000002
+  Std: 0.012359
+  Min: -0.267555
+  Max: 0.492684
+
+pretrained.blocks.12.mlp.fc2.bias: 1024 params
+  Mean: -0.004540
+  Std: 0.153442
+  Min: -2.849825
+  Max: 1.213870
+
+pretrained.blocks.12.ls2.gamma: 1024 params
+  Mean: -0.004239
+  Std: 0.337501
+  Min: -1.801693
+  Max: 0.808362
+
+pretrained.blocks.13.norm1.weight: 1024 params
+  Mean: 1.109001
+  Std: 0.398385
+  Min: 0.183373
+  Max: 6.281048
+
+pretrained.blocks.13.norm1.bias: 1024 params
+  Mean: 0.006493
+  Std: 0.174198
+  Min: -1.729125
+  Max: 1.928962
+
+pretrained.blocks.13.attn.qkv.weight: 3145728 params
+  Mean: -0.000005
+  Std: 0.015748
+  Min: -0.182193
+  Max: 0.261831
+
+pretrained.blocks.13.attn.qkv.bias: 3072 params
+  Mean: 0.002144
+  Std: 0.672320
+  Min: -5.434870
+  Max: 7.380672
+
+pretrained.blocks.13.attn.proj.weight: 1048576 params
+  Mean: -0.000004
+  Std: 0.013836
+  Min: -0.174309
+  Max: 0.191257
+
+pretrained.blocks.13.attn.proj.bias: 1024 params
+  Mean: -0.001669
+  Std: 0.146703
+  Min: -2.902096
+  Max: 2.699434
+
+pretrained.blocks.13.ls1.gamma: 1024 params
+  Mean: 0.036085
+  Std: 0.349318
+  Min: -0.900084
+  Max: 0.585421
+
+pretrained.blocks.13.norm2.weight: 1024 params
+  Mean: 1.205515
+  Std: 0.217551
+  Min: 0.241200
+  Max: 3.625359
+
+pretrained.blocks.13.norm2.bias: 1024 params
+  Mean: 0.021645
+  Std: 0.198758
+  Min: -1.761104
+  Max: 1.978906
+
+pretrained.blocks.13.mlp.fc1.weight: 4194304 params
+  Mean: -0.000140
+  Std: 0.014534
+  Min: -0.329984
+  Max: 0.242020
+
+pretrained.blocks.13.mlp.fc1.bias: 4096 params
+  Mean: -0.969282
+  Std: 0.348673
+  Min: -2.898898
+  Max: 0.285061
+
+pretrained.blocks.13.mlp.fc2.weight: 4194304 params
+  Mean: -0.000009
+  Std: 0.012479
+  Min: -0.270700
+  Max: 0.256428
+
+pretrained.blocks.13.mlp.fc2.bias: 1024 params
+  Mean: -0.003758
+  Std: 0.146151
+  Min: -2.545737
+  Max: 0.464824
+
+pretrained.blocks.13.ls2.gamma: 1024 params
+  Mean: 0.010051
+  Std: 0.423487
+  Min: -1.703207
+  Max: 0.883043
+
+pretrained.blocks.14.norm1.weight: 1024 params
+  Mean: 1.135966
+  Std: 0.321373
+  Min: 0.237450
+  Max: 4.684655
+
+pretrained.blocks.14.norm1.bias: 1024 params
+  Mean: 0.006615
+  Std: 0.174311
+  Min: -2.081730
+  Max: 2.165062
+
+pretrained.blocks.14.attn.qkv.weight: 3145728 params
+  Mean: -0.000010
+  Std: 0.015979
+  Min: -0.185024
+  Max: 0.183539
+
+pretrained.blocks.14.attn.qkv.bias: 3072 params
+  Mean: -0.013696
+  Std: 0.624693
+  Min: -8.264842
+  Max: 6.612732
+
+pretrained.blocks.14.attn.proj.weight: 1048576 params
+  Mean: -0.000006
+  Std: 0.013874
+  Min: -0.164142
+  Max: 0.129606
+
+pretrained.blocks.14.attn.proj.bias: 1024 params
+  Mean: 0.008208
+  Std: 0.150598
+  Min: -0.332970
+  Max: 2.860638
+
+pretrained.blocks.14.ls1.gamma: 1024 params
+  Mean: 0.036466
+  Std: 0.423306
+  Min: -0.996604
+  Max: 0.700123
+
+pretrained.blocks.14.norm2.weight: 1024 params
+  Mean: 1.211603
+  Std: 0.246401
+  Min: 0.197139
+  Max: 4.767018
+
+pretrained.blocks.14.norm2.bias: 1024 params
+  Mean: 0.032158
+  Std: 0.235851
+  Min: -1.690180
+  Max: 2.002744
+
+pretrained.blocks.14.mlp.fc1.weight: 4194304 params
+  Mean: -0.000263
+  Std: 0.014769
+  Min: -0.209496
+  Max: 0.224811
+
+pretrained.blocks.14.mlp.fc1.bias: 4096 params
+  Mean: -1.022990
+  Std: 0.383625
+  Min: -3.265297
+  Max: 0.135038
+
+pretrained.blocks.14.mlp.fc2.weight: 4194304 params
+  Mean: -0.000021
+  Std: 0.012508
+  Min: -0.494335
+  Max: 0.251015
+
+pretrained.blocks.14.mlp.fc2.bias: 1024 params
+  Mean: -0.009242
+  Std: 0.147371
+  Min: -2.499508
+  Max: 0.497672
+
+pretrained.blocks.14.ls2.gamma: 1024 params
+  Mean: -0.014079
+  Std: 0.553097
+  Min: -2.330960
+  Max: 0.949989
+
+pretrained.blocks.15.norm1.weight: 1024 params
+  Mean: 1.023081
+  Std: 0.275124
+  Min: 0.207874
+  Max: 4.106790
+
+pretrained.blocks.15.norm1.bias: 1024 params
+  Mean: 0.007729
+  Std: 0.177012
+  Min: -2.031780
+  Max: 2.308254
+
+pretrained.blocks.15.attn.qkv.weight: 3145728 params
+  Mean: -0.000002
+  Std: 0.016213
+  Min: -0.176226
+  Max: 0.183242
+
+pretrained.blocks.15.attn.qkv.bias: 3072 params
+  Mean: -0.007935
+  Std: 0.564870
+  Min: -5.497365
+  Max: 5.085445
+
+pretrained.blocks.15.attn.proj.weight: 1048576 params
+  Mean: -0.000029
+  Std: 0.014106
+  Min: -0.190436
+  Max: 0.188539
+
+pretrained.blocks.15.attn.proj.bias: 1024 params
+  Mean: 0.002691
+  Std: 0.156499
+  Min: -1.934213
+  Max: 3.854543
+
+pretrained.blocks.15.ls1.gamma: 1024 params
+  Mean: 0.072917
+  Std: 0.672148
+  Min: -1.383699
+  Max: 1.501186
+
+pretrained.blocks.15.norm2.weight: 1024 params
+  Mean: 1.165858
+  Std: 0.194240
+  Min: 0.209169
+  Max: 3.066815
+
+pretrained.blocks.15.norm2.bias: 1024 params
+  Mean: 0.034651
+  Std: 0.231886
+  Min: -1.419832
+  Max: 1.883202
+
+pretrained.blocks.15.mlp.fc1.weight: 4194304 params
+  Mean: -0.000278
+  Std: 0.014889
+  Min: -0.209839
+  Max: 0.201879
+
+pretrained.blocks.15.mlp.fc1.bias: 4096 params
+  Mean: -1.055619
+  Std: 0.400450
+  Min: -3.085086
+  Max: 0.361824
+
+pretrained.blocks.15.mlp.fc2.weight: 4194304 params
+  Mean: -0.000024
+  Std: 0.012761
+  Min: -0.245469
+  Max: 0.260906
+
+pretrained.blocks.15.mlp.fc2.bias: 1024 params
+  Mean: -0.008284
+  Std: 0.140297
+  Min: -2.038821
+  Max: 0.522271
+
+pretrained.blocks.15.ls2.gamma: 1024 params
+  Mean: -0.000348
+  Std: 0.777950
+  Min: -2.596657
+  Max: 1.948180
+
+pretrained.blocks.16.norm1.weight: 1024 params
+  Mean: 1.122188
+  Std: 0.269918
+  Min: 0.263655
+  Max: 5.282022
+
+pretrained.blocks.16.norm1.bias: 1024 params
+  Mean: 0.007493
+  Std: 0.202397
+  Min: -2.576681
+  Max: 2.062089
+
+pretrained.blocks.16.attn.qkv.weight: 3145728 params
+  Mean: -0.000005
+  Std: 0.016412
+  Min: -0.226394
+  Max: 0.165975
+
+pretrained.blocks.16.attn.qkv.bias: 3072 params
+  Mean: 0.027577
+  Std: 0.603501
+  Min: -4.771963
+  Max: 6.200086
+
+pretrained.blocks.16.attn.proj.weight: 1048576 params
+  Mean: 0.000001
+  Std: 0.014082
+  Min: -0.204342
+  Max: 0.173439
+
+pretrained.blocks.16.attn.proj.bias: 1024 params
+  Mean: -0.001168
+  Std: 0.185219
+  Min: -1.082614
+  Max: 4.998497
+
+pretrained.blocks.16.ls1.gamma: 1024 params
+  Mean: 0.063205
+  Std: 0.672345
+  Min: -1.148729
+  Max: 1.112140
+
+pretrained.blocks.16.norm2.weight: 1024 params
+  Mean: 1.245256
+  Std: 0.213334
+  Min: 0.219345
+  Max: 3.797621
+
+pretrained.blocks.16.norm2.bias: 1024 params
+  Mean: 0.048349
+  Std: 0.285580
+  Min: -1.362925
+  Max: 2.689959
+
+pretrained.blocks.16.mlp.fc1.weight: 4194304 params
+  Mean: -0.000458
+  Std: 0.015014
+  Min: -0.227288
+  Max: 0.295469
+
+pretrained.blocks.16.mlp.fc1.bias: 4096 params
+  Mean: -1.085863
+  Std: 0.401788
+  Min: -3.988375
+  Max: 0.323058
+
+pretrained.blocks.16.mlp.fc2.weight: 4194304 params
+  Mean: -0.000021
+  Std: 0.012937
+  Min: -0.462475
+  Max: 0.381042
+
+pretrained.blocks.16.mlp.fc2.bias: 1024 params
+  Mean: -0.005397
+  Std: 0.147819
+  Min: -2.239732
+  Max: 1.898288
+
+pretrained.blocks.16.ls2.gamma: 1024 params
+  Mean: 0.071648
+  Std: 1.032623
+  Min: -3.399709
+  Max: 1.554333
+
+pretrained.blocks.17.norm1.weight: 1024 params
+  Mean: 1.101021
+  Std: 0.241047
+  Min: 0.248119
+  Max: 4.204589
+
+pretrained.blocks.17.norm1.bias: 1024 params
+  Mean: 0.006460
+  Std: 0.221635
+  Min: -3.161077
+  Max: 2.535155
+
+pretrained.blocks.17.attn.qkv.weight: 3145728 params
+  Mean: -0.000000
+  Std: 0.016529
+  Min: -0.169404
+  Max: 0.183798
+
+pretrained.blocks.17.attn.qkv.bias: 3072 params
+  Mean: 0.001546
+  Std: 0.952231
+  Min: -12.158982
+  Max: 9.636699
+
+pretrained.blocks.17.attn.proj.weight: 1048576 params
+  Mean: -0.000003
+  Std: 0.014133
+  Min: -0.236758
+  Max: 0.240209
+
+pretrained.blocks.17.attn.proj.bias: 1024 params
+  Mean: 0.005407
+  Std: 0.186082
+  Min: -0.613916
+  Max: 5.076666
+
+pretrained.blocks.17.ls1.gamma: 1024 params
+  Mean: 0.090548
+  Std: 0.883331
+  Min: -1.793058
+  Max: 2.075797
+
+pretrained.blocks.17.norm2.weight: 1024 params
+  Mean: 1.284589
+  Std: 0.235623
+  Min: 0.352360
+  Max: 3.951453
+
+pretrained.blocks.17.norm2.bias: 1024 params
+  Mean: 0.025472
+  Std: 0.290944
+  Min: -1.561239
+  Max: 3.391927
+
+pretrained.blocks.17.mlp.fc1.weight: 4194304 params
+  Mean: -0.000209
+  Std: 0.015087
+  Min: -0.379010
+  Max: 0.347405
+
+pretrained.blocks.17.mlp.fc1.bias: 4096 params
+  Mean: -1.113453
+  Std: 0.439622
+  Min: -7.690742
+  Max: 0.628261
+
+pretrained.blocks.17.mlp.fc2.weight: 4194304 params
+  Mean: 0.000012
+  Std: 0.012525
+  Min: -0.251175
+  Max: 0.308724
+
+pretrained.blocks.17.mlp.fc2.bias: 1024 params
+  Mean: 0.001818
+  Std: 0.147788
+  Min: -2.617360
+  Max: 1.267637
+
+pretrained.blocks.17.ls2.gamma: 1024 params
+  Mean: -0.070600
+  Std: 1.267573
+  Min: -6.837252
+  Max: 1.681193
+
+pretrained.blocks.18.norm1.weight: 1024 params
+  Mean: 1.059458
+  Std: 0.231999
+  Min: 0.181326
+  Max: 3.731776
+
+pretrained.blocks.18.norm1.bias: 1024 params
+  Mean: 0.007158
+  Std: 0.217840
+  Min: -3.057018
+  Max: 2.723890
+
+pretrained.blocks.18.attn.qkv.weight: 3145728 params
+  Mean: 0.000001
+  Std: 0.016610
+  Min: -0.153907
+  Max: 0.175152
+
+pretrained.blocks.18.attn.qkv.bias: 3072 params
+  Mean: 0.009411
+  Std: 0.805474
+  Min: -7.080734
+  Max: 9.405033
+
+pretrained.blocks.18.attn.proj.weight: 1048576 params
+  Mean: -0.000004
+  Std: 0.014259
+  Min: -0.235246
+  Max: 0.222164
+
+pretrained.blocks.18.attn.proj.bias: 1024 params
+  Mean: -0.011557
+  Std: 0.188111
+  Min: -5.350046
+  Max: 0.598519
+
+pretrained.blocks.18.ls1.gamma: 1024 params
+  Mean: 0.117083
+  Std: 1.251584
+  Min: -2.601316
+  Max: 3.272730
+
+pretrained.blocks.18.norm2.weight: 1024 params
+  Mean: 1.237200
+  Std: 0.263680
+  Min: 0.364914
+  Max: 3.745411
+
+pretrained.blocks.18.norm2.bias: 1024 params
+  Mean: 0.012988
+  Std: 0.263683
+  Min: -1.730019
+  Max: 2.966662
+
+pretrained.blocks.18.mlp.fc1.weight: 4194304 params
+  Mean: -0.000059
+  Std: 0.015078
+  Min: -0.264530
+  Max: 0.260596
+
+pretrained.blocks.18.mlp.fc1.bias: 4096 params
+  Mean: -1.133949
+  Std: 0.384556
+  Min: -2.622601
+  Max: 0.477064
+
+pretrained.blocks.18.mlp.fc2.weight: 4194304 params
+  Mean: -0.000017
+  Std: 0.012825
+  Min: -0.178825
+  Max: 0.229038
+
+pretrained.blocks.18.mlp.fc2.bias: 1024 params
+  Mean: -0.003763
+  Std: 0.179820
+  Min: -3.982030
+  Max: 1.252536
+
+pretrained.blocks.18.ls2.gamma: 1024 params
+  Mean: -0.008561
+  Std: 1.765953
+  Min: -7.717502
+  Max: 2.160319
+
+pretrained.blocks.19.norm1.weight: 1024 params
+  Mean: 1.135468
+  Std: 0.238366
+  Min: 0.222054
+  Max: 3.394449
+
+pretrained.blocks.19.norm1.bias: 1024 params
+  Mean: 0.002477
+  Std: 0.240543
+  Min: -3.589533
+  Max: 3.069360
+
+pretrained.blocks.19.attn.qkv.weight: 3145728 params
+  Mean: 0.000003
+  Std: 0.016494
+  Min: -0.141149
+  Max: 0.158987
+
+pretrained.blocks.19.attn.qkv.bias: 3072 params
+  Mean: 0.046923
+  Std: 1.114004
+  Min: -18.369291
+  Max: 14.973688
+
+pretrained.blocks.19.attn.proj.weight: 1048576 params
+  Mean: 0.000008
+  Std: 0.014478
+  Min: -0.220518
+  Max: 0.190888
+
+pretrained.blocks.19.attn.proj.bias: 1024 params
+  Mean: -0.008795
+  Std: 0.206562
+  Min: -5.430351
+  Max: 0.765718
+
+pretrained.blocks.19.ls1.gamma: 1024 params
+  Mean: 0.196779
+  Std: 1.537197
+  Min: -2.351256
+  Max: 3.818586
+
+pretrained.blocks.19.norm2.weight: 1024 params
+  Mean: 1.322618
+  Std: 0.250630
+  Min: -0.514494
+  Max: 3.715494
+
+pretrained.blocks.19.norm2.bias: 1024 params
+  Mean: 0.009011
+  Std: 0.247354
+  Min: -2.083266
+  Max: 1.782125
+
+pretrained.blocks.19.mlp.fc1.weight: 4194304 params
+  Mean: -0.000126
+  Std: 0.015057
+  Min: -0.228465
+  Max: 0.209695
+
+pretrained.blocks.19.mlp.fc1.bias: 4096 params
+  Mean: -1.174190
+  Std: 0.412499
+  Min: -3.012014
+  Max: 2.860512
+
+pretrained.blocks.19.mlp.fc2.weight: 4194304 params
+  Mean: 0.000011
+  Std: 0.013057
+  Min: -0.210400
+  Max: 0.198931
+
+pretrained.blocks.19.mlp.fc2.bias: 1024 params
+  Mean: 0.001260
+  Std: 0.183445
+  Min: -4.205038
+  Max: 1.274716
+
+pretrained.blocks.19.ls2.gamma: 1024 params
+  Mean: 0.020553
+  Std: 2.576276
+  Min: -11.722797
+  Max: 3.243364
+
+pretrained.blocks.20.norm1.weight: 1024 params
+  Mean: 1.152593
+  Std: 0.233416
+  Min: 0.284620
+  Max: 3.200776
+
+pretrained.blocks.20.norm1.bias: 1024 params
+  Mean: 0.001871
+  Std: 0.226902
+  Min: -3.104508
+  Max: 3.073529
+
+pretrained.blocks.20.attn.qkv.weight: 3145728 params
+  Mean: -0.000002
+  Std: 0.016345
+  Min: -0.123306
+  Max: 0.138853
+
+pretrained.blocks.20.attn.qkv.bias: 3072 params
+  Mean: 0.001642
+  Std: 1.089656
+  Min: -8.387300
+  Max: 18.307369
+
+pretrained.blocks.20.attn.proj.weight: 1048576 params
+  Mean: -0.000014
+  Std: 0.014917
+  Min: -0.261709
+  Max: 0.217898
+
+pretrained.blocks.20.attn.proj.bias: 1024 params
+  Mean: -0.003282
+  Std: 0.184755
+  Min: -4.288337
+  Max: 0.572805
+
+pretrained.blocks.20.ls1.gamma: 1024 params
+  Mean: 0.225355
+  Std: 2.237172
+  Min: -4.402685
+  Max: 4.859850
+
+pretrained.blocks.20.norm2.weight: 1024 params
+  Mean: 1.380280
+  Std: 0.280035
+  Min: -0.558912
+  Max: 4.095099
+
+pretrained.blocks.20.norm2.bias: 1024 params
+  Mean: 0.079078
+  Std: 0.369846
+  Min: -2.009442
+  Max: 3.935804
+
+pretrained.blocks.20.mlp.fc1.weight: 4194304 params
+  Mean: -0.001013
+  Std: 0.015179
+  Min: -0.180700
+  Max: 0.239281
+
+pretrained.blocks.20.mlp.fc1.bias: 4096 params
+  Mean: -1.326625
+  Std: 0.369390
+  Min: -2.424046
+  Max: 0.763849
+
+pretrained.blocks.20.mlp.fc2.weight: 4194304 params
+  Mean: -0.000027
+  Std: 0.013470
+  Min: -0.419517
+  Max: 0.258931
+
+pretrained.blocks.20.mlp.fc2.bias: 1024 params
+  Mean: -0.003061
+  Std: 0.219253
+  Min: -5.346072
+  Max: 1.384658
+
+pretrained.blocks.20.ls2.gamma: 1024 params
+  Mean: 0.141375
+  Std: 3.973324
+  Min: -6.259063
+  Max: 10.172974
+
+pretrained.blocks.21.norm1.weight: 1024 params
+  Mean: 1.254794
+  Std: 0.309715
+  Min: 0.322152
+  Max: 3.922030
+
+pretrained.blocks.21.norm1.bias: 1024 params
+  Mean: 0.005137
+  Std: 0.267755
+  Min: -4.260344
+  Max: 2.939820
+
+pretrained.blocks.21.attn.qkv.weight: 3145728 params
+  Mean: -0.000003
+  Std: 0.016543
+  Min: -0.131711
+  Max: 0.126392
+
+pretrained.blocks.21.attn.qkv.bias: 3072 params
+  Mean: 0.020772
+  Std: 0.930569
+  Min: -14.115973
+  Max: 10.412021
+
+pretrained.blocks.21.attn.proj.weight: 1048576 params
+  Mean: 0.000018
+  Std: 0.015053
+  Min: -0.361748
+  Max: 0.207682
+
+pretrained.blocks.21.attn.proj.bias: 1024 params
+  Mean: -0.006130
+  Std: 0.220611
+  Min: -5.893379
+  Max: 0.777515
+
+pretrained.blocks.21.ls1.gamma: 1024 params
+  Mean: 0.341117
+  Std: 2.765459
+  Min: -5.690713
+  Max: 5.263621
+
+pretrained.blocks.21.norm2.weight: 1024 params
+  Mean: 1.620185
+  Std: 0.327185
+  Min: -0.587001
+  Max: 4.693694
+
+pretrained.blocks.21.norm2.bias: 1024 params
+  Mean: 0.137173
+  Std: 0.421092
+  Min: -2.221900
+  Max: 3.359827
+
+pretrained.blocks.21.mlp.fc1.weight: 4194304 params
+  Mean: -0.001759
+  Std: 0.014993
+  Min: -0.193338
+  Max: 0.147382
+
+pretrained.blocks.21.mlp.fc1.bias: 4096 params
+  Mean: -1.404633
+  Std: 0.379561
+  Min: -2.538262
+  Max: 0.806336
+
+pretrained.blocks.21.mlp.fc2.weight: 4194304 params
+  Mean: -0.000023
+  Std: 0.013908
+  Min: -0.420667
+  Max: 0.303278
+
+pretrained.blocks.21.mlp.fc2.bias: 1024 params
+  Mean: -0.002046
+  Std: 0.288170
+  Min: -7.825565
+  Max: 1.317755
+
+pretrained.blocks.21.ls2.gamma: 1024 params
+  Mean: 0.372283
+  Std: 6.445214
+  Min: -15.824005
+  Max: 8.503107
+
+pretrained.blocks.22.norm1.weight: 1024 params
+  Mean: 1.236570
+  Std: 0.407671
+  Min: 0.291848
+  Max: 4.577345
+
+pretrained.blocks.22.norm1.bias: 1024 params
+  Mean: 0.008265
+  Std: 0.316800
+  Min: -4.374579
+  Max: 2.795455
+
+pretrained.blocks.22.attn.qkv.weight: 3145728 params
+  Mean: -0.000003
+  Std: 0.016822
+  Min: -0.141347
+  Max: 0.187936
+
+pretrained.blocks.22.attn.qkv.bias: 3072 params
+  Mean: -0.081027
+  Std: 2.404374
+  Min: -69.892761
+  Max: 26.944492
+
+pretrained.blocks.22.attn.proj.weight: 1048576 params
+  Mean: -0.000025
+  Std: 0.015313
+  Min: -0.355956
+  Max: 0.393024
+
+pretrained.blocks.22.attn.proj.bias: 1024 params
+  Mean: -0.010730
+  Std: 0.281331
+  Min: -7.961730
+  Max: 1.896887
+
+pretrained.blocks.22.ls1.gamma: 1024 params
+  Mean: 0.292669
+  Std: 4.310419
+  Min: -5.844168
+  Max: 6.872791
+
+pretrained.blocks.22.norm2.weight: 1024 params
+  Mean: 1.590534
+  Std: 0.486426
+  Min: -0.570736
+  Max: 6.426182
+
+pretrained.blocks.22.norm2.bias: 1024 params
+  Mean: 0.080534
+  Std: 0.480123
+  Min: -4.435772
+  Max: 3.933986
+
+pretrained.blocks.22.mlp.fc1.weight: 4194304 params
+  Mean: -0.001098
+  Std: 0.014868
+  Min: -0.125440
+  Max: 0.132235
+
+pretrained.blocks.22.mlp.fc1.bias: 4096 params
+  Mean: -1.470895
+  Std: 0.405515
+  Min: -3.126806
+  Max: 0.432039
+
+pretrained.blocks.22.mlp.fc2.weight: 4194304 params
+  Mean: -0.000023
+  Std: 0.013820
+  Min: -0.361256
+  Max: 0.455061
+
+pretrained.blocks.22.mlp.fc2.bias: 1024 params
+  Mean: -0.006699
+  Std: 0.335288
+  Min: -9.295487
+  Max: 0.848471
+
+pretrained.blocks.22.ls2.gamma: 1024 params
+  Mean: 0.587248
+  Std: 8.819865
+  Min: -14.316052
+  Max: 11.997194
+
+pretrained.blocks.23.norm1.weight: 1024 params
+  Mean: 1.326855
+  Std: 0.625017
+  Min: 0.261213
+  Max: 6.958899
+
+pretrained.blocks.23.norm1.bias: 1024 params
+  Mean: 0.009189
+  Std: 0.339447
+  Min: -5.288548
+  Max: 3.060242
+
+pretrained.blocks.23.attn.qkv.weight: 3145728 params
+  Mean: 0.000000
+  Std: 0.016746
+  Min: -0.129413
+  Max: 0.164560
+
+pretrained.blocks.23.attn.qkv.bias: 3072 params
+  Mean: -0.051715
+  Std: 1.768407
+  Min: -20.595411
+  Max: 16.103243
+
+pretrained.blocks.23.attn.proj.weight: 1048576 params
+  Mean: -0.000019
+  Std: 0.016006
+  Min: -0.314449
+  Max: 0.468752
+
+pretrained.blocks.23.attn.proj.bias: 1024 params
+  Mean: 0.011561
+  Std: 0.395733
+  Min: -1.223243
+  Max: 8.899232
+
+pretrained.blocks.23.ls1.gamma: 1024 params
+  Mean: 0.775086
+  Std: 7.521729
+  Min: -15.168331
+  Max: 10.692039
+
+pretrained.blocks.23.norm2.weight: 1024 params
+  Mean: 1.731720
+  Std: 0.869758
+  Min: -0.195766
+  Max: 9.851475
+
+pretrained.blocks.23.norm2.bias: 1024 params
+  Mean: -0.031437
+  Std: 0.401580
+  Min: -2.517432
+  Max: 2.636581
+
+pretrained.blocks.23.mlp.fc1.weight: 4194304 params
+  Mean: 0.000246
+  Std: 0.015361
+  Min: -0.459910
+  Max: 0.452824
+
+pretrained.blocks.23.mlp.fc1.bias: 4096 params
+  Mean: -1.480119
+  Std: 0.282420
+  Min: -7.192039
+  Max: 1.570186
+
+pretrained.blocks.23.mlp.fc2.weight: 4194304 params
+  Mean: -0.000029
+  Std: 0.014384
+  Min: -0.416351
+  Max: 0.348061
+
+pretrained.blocks.23.mlp.fc2.bias: 1024 params
+  Mean: -0.009228
+  Std: 0.267854
+  Min: -1.148569
+  Max: 2.037379
+
+pretrained.blocks.23.ls2.gamma: 1024 params
+  Mean: -0.136312
+  Std: 9.740715
+  Min: -16.389221
+  Max: 21.947021
+
+pretrained.norm.weight: 1024 params
+  Mean: 1.599652
+  Std: 0.827337
+  Min: -0.164757
+  Max: 9.135697
+
+pretrained.norm.bias: 1024 params
+  Mean: -0.002929
+  Std: 0.347585
+  Min: -1.273173
+  Max: 1.455905
+
+depth_head.projects.0.weight: 262144 params
+  Mean: 0.000008
+  Std: 0.032263
+  Min: -0.180432
+  Max: 0.180500
+
+depth_head.projects.0.bias: 256 params
+  Mean: 0.000571
+  Std: 0.017943
+  Min: -0.035778
+  Max: 0.052381
+
+depth_head.projects.1.weight: 524288 params
+  Mean: -0.000028
+  Std: 0.028766
+  Min: -0.152850
+  Max: 0.143754
+
+depth_head.projects.1.bias: 512 params
+  Mean: -0.000929
+  Std: 0.021147
+  Min: -0.067814
+  Max: 0.053004
+
+depth_head.projects.2.weight: 1048576 params
+  Mean: -0.000021
+  Std: 0.028675
+  Min: -0.170878
+  Max: 0.155689
+
+depth_head.projects.2.bias: 1024 params
+  Mean: -0.000191
+  Std: 0.022634
+  Min: -0.121953
+  Max: 0.107512
+
+depth_head.projects.3.weight: 1048576 params
+  Mean: -0.000003
+  Std: 0.021311
+  Min: -0.168427
+  Max: 0.160096
+
+depth_head.projects.3.bias: 1024 params
+  Mean: 0.000132
+  Std: 0.032505
+  Min: -0.104941
+  Max: 0.108781
+
+depth_head.resize_layers.0.weight: 1048576 params
+  Mean: -0.000002
+  Std: 0.025219
+  Min: -0.132870
+  Max: 0.142253
+
+depth_head.resize_layers.0.bias: 256 params
+  Mean: -0.005680
+  Std: 0.053186
+  Min: -0.155940
+  Max: 0.199491
+
+depth_head.resize_layers.1.weight: 1048576 params
+  Mean: 0.000004
+  Std: 0.022779
+  Min: -0.155658
+  Max: 0.126471
+
+depth_head.resize_layers.1.bias: 512 params
+  Mean: -0.000807
+  Std: 0.043391
+  Min: -0.128929
+  Max: 0.142902
+
+depth_head.resize_layers.3.weight: 9437184 params
+  Mean: -0.000016
+  Std: 0.015888
+  Min: -0.138010
+  Max: 0.141837
+
+depth_head.resize_layers.3.bias: 1024 params
+  Mean: -0.000494
+  Std: 0.028157
+  Min: -0.140938
+  Max: 0.130970
+
+depth_head.scratch.layer1_rn.weight: 589824 params
+  Mean: 0.000248
+  Std: 0.027110
+  Min: -0.204635
+  Max: 0.230274
+
+depth_head.scratch.layer2_rn.weight: 1179648 params
+  Mean: 0.000098
+  Std: 0.020701
+  Min: -0.170095
+  Max: 0.150350
+
+depth_head.scratch.layer3_rn.weight: 2359296 params
+  Mean: 0.000093
+  Std: 0.020770
+  Min: -0.206165
+  Max: 0.219212
+
+depth_head.scratch.layer4_rn.weight: 2359296 params
+  Mean: 0.000006
+  Std: 0.016473
+  Min: -0.154323
+  Max: 0.161177
+
+depth_head.scratch.refinenet1.out_conv.weight: 65536 params
+  Mean: -0.000035
+  Std: 0.038054
+  Min: -0.210257
+  Max: 0.170015
+
+depth_head.scratch.refinenet1.out_conv.bias: 256 params
+  Mean: -0.012186
+  Std: 0.110736
+  Min: -0.340303
+  Max: 0.315572
+
+depth_head.scratch.refinenet1.resConfUnit1.conv1.weight: 589824 params
+  Mean: -0.000847
+  Std: 0.030696
+  Min: -0.482281
+  Max: 0.274099
+
+depth_head.scratch.refinenet1.resConfUnit1.conv1.bias: 256 params
+  Mean: 0.019095
+  Std: 0.030652
+  Min: -0.040196
+  Max: 0.121347
+
+depth_head.scratch.refinenet1.resConfUnit1.conv2.weight: 589824 params
+  Mean: -0.000898
+  Std: 0.026785
+  Min: -0.361653
+  Max: 0.428968
+
+depth_head.scratch.refinenet1.resConfUnit1.conv2.bias: 256 params
+  Mean: -0.005865
+  Std: 0.066823
+  Min: -0.302958
+  Max: 0.160850
+
+depth_head.scratch.refinenet1.resConfUnit2.conv1.weight: 589824 params
+  Mean: -0.001538
+  Std: 0.025662
+  Min: -0.454775
+  Max: 0.333644
+
+depth_head.scratch.refinenet1.resConfUnit2.conv1.bias: 256 params
+  Mean: 0.005273
+  Std: 0.039497
+  Min: -0.107975
+  Max: 0.170360
+
+depth_head.scratch.refinenet1.resConfUnit2.conv2.weight: 589824 params
+  Mean: 0.000328
+  Std: 0.025908
+  Min: -0.315115
+  Max: 0.281572
+
+depth_head.scratch.refinenet1.resConfUnit2.conv2.bias: 256 params
+  Mean: -0.005229
+  Std: 0.073253
+  Min: -0.286012
+  Max: 0.165499
+
+depth_head.scratch.refinenet2.out_conv.weight: 65536 params
+  Mean: 0.000328
+  Std: 0.033962
+  Min: -0.163701
+  Max: 0.163477
+
+depth_head.scratch.refinenet2.out_conv.bias: 256 params
+  Mean: -0.007249
+  Std: 0.074022
+  Min: -0.289899
+  Max: 0.143603
+
+depth_head.scratch.refinenet2.resConfUnit1.conv1.weight: 589824 params
+  Mean: -0.001538
+  Std: 0.023273
+  Min: -0.185621
+  Max: 0.127850
+
+depth_head.scratch.refinenet2.resConfUnit1.conv1.bias: 256 params
+  Mean: 0.001854
+  Std: 0.032125
+  Min: -0.065307
+  Max: 0.151505
+
+depth_head.scratch.refinenet2.resConfUnit1.conv2.weight: 589824 params
+  Mean: -0.000975
+  Std: 0.021777
+  Min: -0.169272
+  Max: 0.145177
+
+depth_head.scratch.refinenet2.resConfUnit1.conv2.bias: 256 params
+  Mean: 0.005010
+  Std: 0.055902
+  Min: -0.226158
+  Max: 0.188561
+
+depth_head.scratch.refinenet2.resConfUnit2.conv1.weight: 589824 params
+  Mean: -0.001239
+  Std: 0.022422
+  Min: -0.270558
+  Max: 0.183422
+
+depth_head.scratch.refinenet2.resConfUnit2.conv1.bias: 256 params
+  Mean: 0.004795
+  Std: 0.033657
+  Min: -0.079398
+  Max: 0.210619
+
+depth_head.scratch.refinenet2.resConfUnit2.conv2.weight: 589824 params
+  Mean: 0.000306
+  Std: 0.021054
+  Min: -0.253781
+  Max: 0.203891
+
+depth_head.scratch.refinenet2.resConfUnit2.conv2.bias: 256 params
+  Mean: 0.004636
+  Std: 0.059625
+  Min: -0.240876
+  Max: 0.246549
+
+depth_head.scratch.refinenet3.out_conv.weight: 65536 params
+  Mean: -0.000033
+  Std: 0.034001
+  Min: -0.120990
+  Max: 0.162350
+
+depth_head.scratch.refinenet3.out_conv.bias: 256 params
+  Mean: 0.005242
+  Std: 0.064136
+  Min: -0.250189
+  Max: 0.250491
+
+depth_head.scratch.refinenet3.resConfUnit1.conv1.weight: 589824 params
+  Mean: -0.001338
+  Std: 0.021424
+  Min: -0.349468
+  Max: 0.200067
+
+depth_head.scratch.refinenet3.resConfUnit1.conv1.bias: 256 params
+  Mean: 0.003297
+  Std: 0.023560
+  Min: -0.114841
+  Max: 0.098850
+
+depth_head.scratch.refinenet3.resConfUnit1.conv2.weight: 589824 params
+  Mean: -0.000471
+  Std: 0.020335
+  Min: -0.165869
+  Max: 0.210940
+
+depth_head.scratch.refinenet3.resConfUnit1.conv2.bias: 256 params
+  Mean: 0.003754
+  Std: 0.053535
+  Min: -0.217543
+  Max: 0.172309
+
+depth_head.scratch.refinenet3.resConfUnit2.conv1.weight: 589824 params
+  Mean: -0.001511
+  Std: 0.021307
+  Min: -0.364698
+  Max: 0.184343
+
+depth_head.scratch.refinenet3.resConfUnit2.conv1.bias: 256 params
+  Mean: 0.010353
+  Std: 0.029452
+  Min: -0.061489
+  Max: 0.191760
+
+depth_head.scratch.refinenet3.resConfUnit2.conv2.weight: 589824 params
+  Mean: 0.000527
+  Std: 0.019650
+  Min: -0.211566
+  Max: 0.204571
+
+depth_head.scratch.refinenet3.resConfUnit2.conv2.bias: 256 params
+  Mean: 0.002033
+  Std: 0.053103
+  Min: -0.176773
+  Max: 0.182444
+
+depth_head.scratch.refinenet4.out_conv.weight: 65536 params
+  Mean: -0.000348
+  Std: 0.031388
+  Min: -0.124126
+  Max: 0.154703
+
+depth_head.scratch.refinenet4.out_conv.bias: 256 params
+  Mean: 0.005118
+  Std: 0.060353
+  Min: -0.230333
+  Max: 0.181358
+
+depth_head.scratch.refinenet4.resConfUnit1.conv1.weight: 589824 params
+  Mean: 0.000001
+  Std: 0.012045
+  Min: -0.020833
+  Max: 0.020833
+
+depth_head.scratch.refinenet4.resConfUnit1.conv1.bias: 256 params
+  Mean: 0.000759
+  Std: 0.012705
+  Min: -0.020691
+  Max: 0.020815
+
+depth_head.scratch.refinenet4.resConfUnit1.conv2.weight: 589824 params
+  Mean: -0.000001
+  Std: 0.012029
+  Min: -0.020833
+  Max: 0.020833
+
+depth_head.scratch.refinenet4.resConfUnit1.conv2.bias: 256 params
+  Mean: 0.000116
+  Std: 0.012508
+  Min: -0.020806
+  Max: 0.020713
+
+depth_head.scratch.refinenet4.resConfUnit2.conv1.weight: 589824 params
+  Mean: -0.002526
+  Std: 0.022021
+  Min: -0.270985
+  Max: 0.296028
+
+depth_head.scratch.refinenet4.resConfUnit2.conv1.bias: 256 params
+  Mean: 0.009843
+  Std: 0.033737
+  Min: -0.067650
+  Max: 0.110802
+
+depth_head.scratch.refinenet4.resConfUnit2.conv2.weight: 589824 params
+  Mean: 0.000846
+  Std: 0.019992
+  Min: -0.201316
+  Max: 0.240116
+
+depth_head.scratch.refinenet4.resConfUnit2.conv2.bias: 256 params
+  Mean: -0.003788
+  Std: 0.054400
+  Min: -0.182409
+  Max: 0.167157
+
+depth_head.scratch.output_conv1.weight: 294912 params
+  Mean: -0.000072
+  Std: 0.023585
+  Min: -0.217390
+  Max: 0.192047
+
+depth_head.scratch.output_conv1.bias: 128 params
+  Mean: 0.000378
+  Std: 0.076151
+  Min: -0.285360
+  Max: 0.314716
+
+depth_head.scratch.output_conv2.0.weight: 36864 params
+  Mean: 0.000015
+  Std: 0.025311
+  Min: -0.157441
+  Max: 0.157313
+
+depth_head.scratch.output_conv2.0.bias: 32 params
+  Mean: 0.043306
+  Std: 0.163218
+  Min: -0.338975
+  Max: 0.356761
+
+depth_head.scratch.output_conv2.2.weight: 32 params
+  Mean: -0.011466
+  Std: 0.137376
+  Min: -0.384736
+  Max: 0.148321
+
+depth_head.scratch.output_conv2.2.bias: 1 params
+  Mean: 0.435410
+  Std: nan
+  Min: 0.435410
+  Max: 0.435410
+

@@ -1,0 +1,12 @@
+unidepth:
+/media/ExtHDD1/jianfu/data/eval/eval/unidepthv2/vits/inhouse/20250528_172520/output
+depthpro:
+/media/ExtHDD1/jianfu/data/eval/eval/depthpro/inhouse/20250528_171615/output
+zoedepth:
+/media/ExtHDD1/jianfu/data/eval/eval/zoedepth/inhouse/K/20250528_174551/output
+3_full:
+/media/ExtHDD1/jianfu/data/eval/eval/dam/inhouse/vits/train_combined_with_dino_20250506_235908_best_abs_rel
+3_head:
+/media/ExtHDD1/jianfu/data/eval/eval/dam/inhouse/vits/train_combined_best_abs_rel
+vkitti_vits:
+/media/ExtHDD1/jianfu/data/eval/eval/dam/inhouse/vits/depthanything_depth_anything_v2_metric_vkitti_vits

@@ -1,0 +1,11 @@
+/root/c3vd/test/color/cecum_t4_a/0000_color.png /root/c3vd/test/depth/cecum_t4_a/0000_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0001_color.png /root/c3vd/test/depth/cecum_t4_a/0001_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0002_color.png /root/c3vd/test/depth/cecum_t4_a/0002_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0003_color.png /root/c3vd/test/depth/cecum_t4_a/0003_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0004_color.png /root/c3vd/test/depth/cecum_t4_a/0004_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0005_color.png /root/c3vd/test/depth/cecum_t4_a/0005_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0006_color.png /root/c3vd/test/depth/cecum_t4_a/0006_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0007_color.png /root/c3vd/test/depth/cecum_t4_a/0007_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0008_color.png /root/c3vd/test/depth/cecum_t4_a/0008_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0009_color.png /root/c3vd/test/depth/cecum_t4_a/0009_depth.tiff
+/root/c3vd/test/color/cecum_t4_a/0010_color.png /root/c3vd/test/depth/cecum_t4_a/0010_depth.tiff

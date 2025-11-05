@@ -1,0 +1,2 @@
+dataset,sampled_files,value_count,quantile_25,quantile_50,quantile_75,mean,variance
+StereoMIS,12170,2599686636,0.073205,0.099393,0.119625,0.099530,0.001399

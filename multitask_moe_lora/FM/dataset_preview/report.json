@@ -1,0 +1,326 @@
+[
+  {
+    "name": "SCARED",
+    "category": "Train/LS",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/SCARED_1.png",
+      "FM/dataset_preview/SCARED_2.png",
+      "FM/dataset_preview/SCARED_3.png",
+      "FM/dataset_preview/SCARED_4.png",
+      "FM/dataset_preview/SCARED_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 28857,
+    "stats_sampled": {
+      "image_min": -2.125,
+      "image_max": 2.76171875,
+      "depth_min": 7.750404620310292e-05,
+      "depth_max": 0.15208439528942108,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.2751879245042801,
+      "valid_ratio_min": 0.0,
+      "valid_ratio_max": 0.4747682511806488,
+      "invalid_ratio_avg": 0.7248120754957199
+    }
+  },
+  {
+    "name": "dVPN",
+    "category": "Train/LS",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/dVPN_1.png",
+      "FM/dataset_preview/dVPN_2.png",
+      "FM/dataset_preview/dVPN_3.png",
+      "FM/dataset_preview/dVPN_4.png",
+      "FM/dataset_preview/dVPN_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 41431,
+    "stats_sampled": {
+      "image_min": -2.03515625,
+      "image_max": 2.640625,
+      "depth_min": 0.028071243315935135,
+      "depth_max": 0.13732020556926727,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.9872450113296509,
+      "valid_ratio_min": 0.9537082314491272,
+      "valid_ratio_max": 1.0,
+      "invalid_ratio_avg": 0.012754988670349077
+    }
+  },
+  {
+    "name": "StereoMIS",
+    "category": "Train/LS",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/StereoMIS_1.png",
+      "FM/dataset_preview/StereoMIS_2.png",
+      "FM/dataset_preview/StereoMIS_3.png",
+      "FM/dataset_preview/StereoMIS_4.png",
+      "FM/dataset_preview/StereoMIS_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 140171,
+    "stats_sampled": {
+      "image_min": -2.125,
+      "image_max": 2.78515625,
+      "depth_min": 0.05372238531708717,
+      "depth_max": 0.30000001192092896,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.9843480229377747,
+      "valid_ratio_min": 0.9382239580154419,
+      "valid_ratio_max": 1.0,
+      "invalid_ratio_avg": 0.01565197706222532
+    }
+  },
+  {
+    "name": "EndoVis2017",
+    "category": "Train/LS",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/EndoVis2017_1.png",
+      "FM/dataset_preview/EndoVis2017_2.png",
+      "FM/dataset_preview/EndoVis2017_3.png",
+      "FM/dataset_preview/EndoVis2017_4.png",
+      "FM/dataset_preview/EndoVis2017_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 3000,
+    "stats_sampled": {
+      "image_min": -2.0703125,
+      "image_max": 2.94140625,
+      "depth_min": 0.014746647328138351,
+      "depth_max": 0.30000001192092896,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.6195226073265075,
+      "valid_ratio_min": 0.6193461418151855,
+      "valid_ratio_max": 0.6196712255477905,
+      "invalid_ratio_avg": 0.38047739267349245
+    }
+  },
+  {
+    "name": "EndoVis2018-ISINet",
+    "category": "Train/LS",
+    "mode": "filelist",
+    "preview_images": [
+      "FM/dataset_preview/EndoVis2018-ISINet_1.png",
+      "FM/dataset_preview/EndoVis2018-ISINet_2.png",
+      "FM/dataset_preview/EndoVis2018-ISINet_3.png",
+      "FM/dataset_preview/EndoVis2018-ISINet_4.png",
+      "FM/dataset_preview/EndoVis2018-ISINet_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 2226,
+    "stats_sampled": {
+      "image_min": 0.0,
+      "image_max": 1.0,
+      "depth_min": 0.016061479225754738,
+      "depth_max": 499421.9375,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.983807373046875,
+      "valid_ratio_min": 0.9665542840957642,
+      "valid_ratio_max": 1.0,
+      "invalid_ratio_avg": 0.016192626953124956
+    }
+  },
+  {
+    "name": "C3VDv2",
+    "category": "Train/NO",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/C3VDv2_1.png",
+      "FM/dataset_preview/C3VDv2_2.png",
+      "FM/dataset_preview/C3VDv2_3.png",
+      "FM/dataset_preview/C3VDv2_4.png",
+      "FM/dataset_preview/C3VDv2_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 67886,
+    "stats_sampled": {
+      "image_min": -2.57421875,
+      "image_max": 2.970703125,
+      "depth_min": 0.0008351022843271494,
+      "depth_max": 0.10000000149011612,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.922482430934906,
+      "valid_ratio_min": 0.8944612145423889,
+      "valid_ratio_max": 0.9299563765525818,
+      "invalid_ratio_avg": 0.077517569065094
+    }
+  },
+  {
+    "name": "SimCol",
+    "category": "Train/NO",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/SimCol_1.png",
+      "FM/dataset_preview/SimCol_2.png",
+      "FM/dataset_preview/SimCol_3.png",
+      "FM/dataset_preview/SimCol_4.png",
+      "FM/dataset_preview/SimCol_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 37833,
+    "stats_sampled": {
+      "image_min": -1.560546875,
+      "image_max": 2.427734375,
+      "depth_min": 0.00937514379620552,
+      "depth_max": 0.19922180473804474,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 1.0,
+      "valid_ratio_min": 1.0,
+      "valid_ratio_max": 1.0,
+      "invalid_ratio_avg": 0.0
+    }
+  },
+  {
+    "name": "Kidney3D",
+    "category": "Train/NO",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/Kidney3D_1.png",
+      "FM/dataset_preview/Kidney3D_2.png",
+      "FM/dataset_preview/Kidney3D_3.png",
+      "FM/dataset_preview/Kidney3D_4.png",
+      "FM/dataset_preview/Kidney3D_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 3000,
+    "stats_sampled": {
+      "image_min": -2.037109375,
+      "image_max": 2.22265625,
+      "depth_min": 0.0005002841353416443,
+      "depth_max": 0.01803162693977356,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.9976634979248047,
+      "valid_ratio_min": 0.9941222667694092,
+      "valid_ratio_max": 1.0,
+      "invalid_ratio_avg": 0.0023365020751953125
+    }
+  },
+  {
+    "name": "Hamlyn Dataset",
+    "category": "Eval/LS",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/Hamlyn_Dataset_1.png",
+      "FM/dataset_preview/Hamlyn_Dataset_2.png",
+      "FM/dataset_preview/Hamlyn_Dataset_3.png",
+      "FM/dataset_preview/Hamlyn_Dataset_4.png",
+      "FM/dataset_preview/Hamlyn_Dataset_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 92672,
+    "stats_sampled": {
+      "image_min": -2.126953125,
+      "image_max": 2.640625,
+      "depth_min": 0.039000000804662704,
+      "depth_max": 0.30000001192092896,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.7135461568832397,
+      "valid_ratio_min": 0.5260416865348816,
+      "valid_ratio_max": 0.8401055932044983,
+      "invalid_ratio_avg": 0.28645384311676025
+    }
+  },
+  {
+    "name": "EndoNeRF",
+    "category": "Eval/LS",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/EndoNeRF_1.png",
+      "FM/dataset_preview/EndoNeRF_2.png",
+      "FM/dataset_preview/EndoNeRF_3.png",
+      "FM/dataset_preview/EndoNeRF_4.png",
+      "FM/dataset_preview/EndoNeRF_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 156,
+    "stats_sampled": {
+      "image_min": -2.12109375,
+      "image_max": 2.7734375,
+      "depth_min": 0.0,
+      "depth_max": 0.11176471412181854,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.7246255517005921,
+      "valid_ratio_min": 0.6799237132072449,
+      "valid_ratio_max": 0.7546443939208984,
+      "invalid_ratio_avg": 0.27537444829940794
+    }
+  },
+  {
+    "name": "C3VD",
+    "category": "Eval/NO",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/C3VD_1.png",
+      "FM/dataset_preview/C3VD_2.png",
+      "FM/dataset_preview/C3VD_3.png",
+      "FM/dataset_preview/C3VD_4.png",
+      "FM/dataset_preview/C3VD_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 10015,
+    "stats_sampled": {
+      "image_min": -2.552734375,
+      "image_max": 2.970703125,
+      "depth_min": 0.0005056231166236103,
+      "depth_max": 0.10000000149011612,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 0.9299526214599609,
+      "valid_ratio_min": 0.929947018623352,
+      "valid_ratio_max": 0.9299563765525818,
+      "invalid_ratio_avg": 0.07004737854003906
+    }
+  },
+  {
+    "name": "EndoMapper",
+    "category": "Eval/NO",
+    "mode": "pt_cache",
+    "preview_images": [
+      "FM/dataset_preview/EndoMapper_1.png",
+      "FM/dataset_preview/EndoMapper_2.png",
+      "FM/dataset_preview/EndoMapper_3.png",
+      "FM/dataset_preview/EndoMapper_4.png",
+      "FM/dataset_preview/EndoMapper_5.png"
+    ],
+    "status": "ok",
+    "missing_files": 0,
+    "total_entries": 1919,
+    "stats_sampled": {
+      "image_min": -1.974609375,
+      "image_max": 2.7890625,
+      "depth_min": 0.00958812702447176,
+      "depth_max": 0.13795310258865356,
+      "has_nan_image": false,
+      "has_nan_depth": false,
+      "valid_ratio_avg": 1.0,
+      "valid_ratio_min": 1.0,
+      "valid_ratio_max": 1.0,
+      "invalid_ratio_avg": 0.0
+    }
+  }
+]

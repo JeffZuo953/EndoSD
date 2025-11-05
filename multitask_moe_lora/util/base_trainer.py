@@ -1,0 +1,91 @@
+#!/usr//bin/env python3
+"""
+训练器基类
+"""
+
+import torch
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from torch.optim import AdamW
+import logging
+import os
+
+from .config import TrainingConfig
+from .train_utils import get_mixed_precision_components, set_epoch_for_samplers
+
+class BaseTrainer:
+    """训练器基类，包含通用功能"""
+    
+    def __init__(self,
+                 model: torch.nn.Module,
+                 config: TrainingConfig,
+                 logger: logging.Logger,
+                 writer: SummaryWriter):
+        """
+        初始化 BaseTrainer
+        
+        Args:
+            model: 模型
+            config: 训练配置
+            logger: 日志记录器
+            writer: TensorBoard writer
+        """
+        self.model = model
+        self.config = config
+        self.logger = logger
+        self.writer = writer
+        
+        self.rank = 0
+        if "RANK" in os.environ:
+            self.rank = int(os.environ["RANK"])
+        elif "LOCAL_RANK" in os.environ:
+            self.rank = int(os.environ["LOCAL_RANK"])
+        elif "SLURM_PROCID" in os.environ:
+            self.rank = int(os.environ["SLURM_PROCID"])
+            
+        self.scaler, self.autocast_kwargs = get_mixed_precision_components(config.mixed_precision)
+
+    def get_current_lr(self) -> tuple:
+        """获取当前学习率"""
+        raise NotImplementedError
+
+    def step_schedulers(self) -> None:
+        """更新学习率调度器"""
+        raise NotImplementedError
+
+    def log_learning_rates(self, epoch: int) -> None:
+        """记录学习率"""
+        if self.rank == 0:
+            lrs = self.get_current_lr()
+            if isinstance(lrs, tuple):
+                if len(lrs) == 2:
+                    depth_lr, seg_lr = lrs
+                    camera_lr = None
+                elif len(lrs) == 3:
+                    depth_lr, seg_lr, camera_lr = lrs
+                else:
+                    depth_lr = seg_lr = camera_lr = None
+
+                if depth_lr is not None:
+                    self.writer.add_scalar("train/depth_lr", depth_lr, epoch)
+                if seg_lr is not None:
+                    self.writer.add_scalar("train/seg_lr", seg_lr, epoch)
+                if camera_lr is not None:
+                    self.writer.add_scalar("train/camera_lr", camera_lr, epoch)
+
+                msg = []
+                if depth_lr is not None:
+                    msg.append(f"Depth: {depth_lr:.2e}")
+                if seg_lr is not None:
+                    msg.append(f"Seg: {seg_lr:.2e}")
+                if camera_lr is not None:
+                    msg.append(f"Camera: {camera_lr:.2e}")
+                if msg:
+                    self.logger.info("Learning rates - " + ", ".join(msg))
+            else:
+                self.writer.add_scalar("train/lr", lrs, epoch)
+                self.logger.info(f"Learning rate: {lrs:.2e}")
+
+    def train_epoch(self, *args, **kwargs):
+        """训练一个epoch"""
+        raise NotImplementedError

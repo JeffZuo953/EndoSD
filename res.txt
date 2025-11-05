@@ -1,0 +1,31 @@
+全0矩阵
+[2025-05-05 15:10:57,730][    INFO] {'encoder': 'vits',
+ 'img_size': 518,
+ 'load_from': '/root/Depth-Anything-V2/checkpoints/latest_vits.pth',
+ 'max_depth': 0.2,
+ 'save_path': '/root/c3vd/vits_fine_tuned'}
+
+[2025-05-05 15:23:49,711][    INFO] ==========================================================================================
+[2025-05-05 15:23:49,712][    INFO]       d1,       d2,       d3,  abs_rel,   sq_rel,     rmse, rmse_log,    log10,    silog
+[2025-05-05 15:23:49,713][    INFO]    0.000,    0.000,    0.000,    1.000,    0.031,    0.036,   10.109,    4.381,    7.162
+[2025-05-05 15:23:49,713][    INFO] ==========================================================================================
+[2025-05-05 15:23:49,713][    INFO] Total validation samples: 1867
+[2025-05-05 15:23:49,713][    INFO] Evaluated samples: 1867
+[2025-05-05 15:23:49,713][    INFO] Total evaluation duration: 767.91 seconds (12.80 minutes)
+
+
+train on 2 eval on 1 
+(dam) root@d37622cc7edd:~/Depth-Anything-V2/metric_depth# bash eval.sh 
+[2025-05-05 14:53:55,974][    INFO] {'encoder': 'vits',
+ 'img_size': 518,
+ 'load_from': '/root/Depth-Anything-V2/checkpoints/latest_vits.pth',
+ 'max_depth': 0.2,
+ 'save_path': '/root/c3vd/vits_fine_tuned'}
+
+[2025-05-05 15:07:56,393][    INFO] ==========================================================================================
+[2025-05-05 15:07:56,400][    INFO]       d1,       d2,       d3,  abs_rel,   sq_rel,     rmse, rmse_log,    log10,    silog
+[2025-05-05 15:07:56,402][    INFO]    0.000,    0.000,    0.000,    0.998,    0.031,    0.036,    6.449,    2.801,    4.561
+[2025-05-05 15:07:56,402][    INFO] ==========================================================================================
+[2025-05-05 15:07:56,402][    INFO] Total validation samples: 1867
+[2025-05-05 15:07:56,402][    INFO] Evaluated samples: 1867
+[2025-05-05 15:07:56,403][    INFO] Total evaluation duration: 836.25 seconds (13.94 minutes)
