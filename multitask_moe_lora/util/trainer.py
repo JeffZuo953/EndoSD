@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 import logging
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Tuple
 from itertools import cycle
 import math
 from collections import Counter
@@ -59,6 +59,8 @@ class MultiTaskTrainer(BaseTrainer):
         self.seg_criterion = torch.nn.CrossEntropyLoss(ignore_index=255, reduction='mean').cuda()
         self.ignore_index = 255
         self._latest_camera_loss: float = 0.0
+        self._camera_eps = 1e-6
+        self._camera_loss_type = getattr(self.config, 'camera_loss_type', 'l1').lower()
 
     @staticmethod
     def _select_primary_dataset(names: Optional[Any]) -> Optional[str]:
@@ -139,6 +141,235 @@ class MultiTaskTrainer(BaseTrainer):
                         seen.add(milestone)
                         percent = int(milestone * 100)
                         self.logger.info(f"[{phase}][{task}][Epoch {epoch}] {primary} ({dataset_type}) progress {percent}% ({processed}/{total})")
+
+    def _to_float_tensor(self, value: Any, device: torch.device) -> torch.Tensor:
+        """Convert arbitrary values (lists, numpy arrays, tensors) to float32 tensors on the desired device."""
+        if torch.is_tensor(value):
+            tensor = value
+        else:
+            tensor = torch.as_tensor(value, dtype=torch.float32)
+        return tensor.to(device=device, dtype=torch.float32, non_blocking=True)
+
+    def _to_bool_tensor(self, value: Any, device: torch.device) -> torch.Tensor:
+        """Convert arbitrary values into boolean tensors on the desired device."""
+        if torch.is_tensor(value):
+            tensor = value
+        else:
+            tensor = torch.as_tensor(value)
+        return tensor.to(device=device, dtype=torch.bool, non_blocking=True)
+
+    def _align_camera_mask(self, tensor: torch.Tensor, batch_size: int, name: str) -> Optional[torch.Tensor]:
+        """Ensure boolean masks broadcast to [batch] shape."""
+        if tensor.dim() == 0:
+            tensor = tensor.unsqueeze(0)
+        elif tensor.dim() == 2 and tensor.size(1) == 1:
+            tensor = tensor.squeeze(1)
+        elif tensor.dim() != 1:
+            self.logger.debug(f"[Camera] {name} mask has incompatible shape {tuple(tensor.shape)}.")
+            return None
+        rows = tensor.size(0)
+        if rows == batch_size:
+            return tensor.contiguous()
+        if rows == 1 and batch_size > 1:
+            return tensor.expand(batch_size).contiguous()
+        self.logger.debug(f"[Camera] {name} mask rows={rows} mismatch batch={batch_size}; skipping.")
+        return None
+
+    def _extract_camera_mask(
+        self,
+        batch: Dict[str, Any],
+        key: str,
+        batch_size: int,
+        device: torch.device,
+    ) -> Optional[torch.Tensor]:
+        value = batch.get(key)
+        if value is None:
+            return None
+        mask_tensor = self._to_bool_tensor(value, device)
+        return self._align_camera_mask(mask_tensor, batch_size, key)
+
+    @staticmethod
+    def _combine_masks(primary: Optional[torch.Tensor], secondary: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+        if primary is None:
+            return secondary
+        if secondary is None:
+            return primary
+        if primary.size(0) != secondary.size(0):
+            return None
+        combined = primary & secondary
+        if not combined.any():
+            return None
+        return combined
+
+    def _filter_tensor_with_mask(
+        self,
+        tensor: Optional[torch.Tensor],
+        mask: Optional[torch.Tensor],
+        name: str,
+    ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+        if tensor is None:
+            return None, None
+        if mask is None:
+            return tensor, None
+        if tensor.size(0) != mask.size(0):
+            self.logger.debug(f"[Camera] {name} mask size mismatch ({mask.size(0)} vs {tensor.size(0)}).")
+            return None, None
+        if not mask.any():
+            self.logger.debug(f"[Camera] {name} mask contains no valid entries.")
+            return None, None
+        return tensor[mask], mask
+
+    def _filter_prediction_with_mask(
+        self,
+        pred: torch.Tensor,
+        mask: Optional[torch.Tensor],
+        name: str,
+    ) -> Optional[torch.Tensor]:
+        if mask is None:
+            return pred
+        if pred.size(0) != mask.size(0):
+            self.logger.debug(f"[Camera] Prediction mask mismatch for {name}.")
+            return None
+        if not mask.any():
+            return None
+        return pred[mask]
+
+    def _filter_camera_size_subset(
+        self,
+        camera_size: Optional[torch.Tensor],
+        size_mask: Optional[torch.Tensor],
+        selection_mask: Optional[torch.Tensor],
+        require_all: bool = False,
+    ) -> Optional[torch.Tensor]:
+        if camera_size is None:
+            return None
+        size_tensor = camera_size if selection_mask is None else camera_size[selection_mask]
+        if size_mask is None:
+            return size_tensor
+        if selection_mask is not None:
+            size_mask = size_mask[selection_mask]
+        if not size_mask.any():
+            return None
+        if not size_mask.all():
+            return None
+        return size_tensor
+
+    def _align_camera_tensor(
+        self,
+        tensor: torch.Tensor,
+        batch_size: int,
+        feature_dim: int,
+        name: str,
+    ) -> Optional[torch.Tensor]:
+        """
+        Ensure tensors used by the camera head have a [batch, feature_dim] shape (or broadcastable from batch=1).
+        """
+        if tensor.dim() == 1:
+            if tensor.numel() < feature_dim:
+                self.logger.debug(f"[Camera] {name} expects >= {feature_dim} values, got {tensor.numel()}.")
+                return None
+            tensor = tensor.unsqueeze(0)
+        if tensor.dim() != 2 or tensor.size(1) < feature_dim:
+            self.logger.debug(f"[Camera] {name} shape {tuple(tensor.shape)} incompatible with feature_dim={feature_dim}.")
+            return None
+        tensor = tensor[:, :feature_dim]
+        rows = tensor.size(0)
+        if rows == batch_size:
+            return tensor.contiguous()
+        if rows == 1 and batch_size > 1:
+            return tensor.expand(batch_size, feature_dim).contiguous()
+        self.logger.debug(
+            f"[Camera] {name} batch mismatch (rows={rows}, batch={batch_size}); skipping camera supervision this step."
+        )
+        return None
+
+    def _extract_camera_size_tensor(
+        self,
+        batch: Dict[str, Any],
+        device: torch.device,
+        batch_size: int,
+    ) -> Optional[torch.Tensor]:
+        size_keys = ("camera_size", "camera_image_size", "camera_size_original", "camera_original_image_size")
+        for key in size_keys:
+            value = batch.get(key)
+            if value is None:
+                continue
+            size_tensor = self._to_float_tensor(value, device)
+            aligned = self._align_camera_tensor(size_tensor, batch_size, 2, key)
+            if aligned is not None:
+                return aligned
+        return None
+
+    def _prepare_camera_targets(
+        self,
+        batch: Dict[str, Any],
+        camera_pred: torch.Tensor,
+    ) -> Optional[Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
+        """
+        Produce aligned prediction, normalized GT intrinsics, and optional camera-size tensors.
+        """
+        batch_size = camera_pred.size(0)
+        device = camera_pred.device
+        camera_size = self._extract_camera_size_tensor(batch, device, batch_size)
+        camera_size_mask = self._extract_camera_mask(batch, 'camera_size_mask', batch_size, device)
+
+        gt_norm_value = batch.get('camera_intrinsics_norm')
+        if gt_norm_value is not None:
+            gt_norm_tensor = self._align_camera_tensor(
+                self._to_float_tensor(gt_norm_value, device),
+                batch_size,
+                4,
+                'camera_intrinsics_norm',
+            )
+            if gt_norm_tensor is not None:
+                norm_mask = self._extract_camera_mask(batch, 'camera_intrinsics_norm_mask', batch_size, device)
+                gt_norm_tensor, selection_mask = self._filter_tensor_with_mask(
+                    gt_norm_tensor, norm_mask, 'camera_intrinsics_norm'
+                )
+                if gt_norm_tensor is not None:
+                    pred_tensor = self._filter_prediction_with_mask(camera_pred, selection_mask, 'camera_intrinsics_norm')
+                    if pred_tensor is not None:
+                        size_tensor = self._filter_camera_size_subset(camera_size, camera_size_mask, selection_mask)
+                        return pred_tensor, gt_norm_tensor.contiguous(), size_tensor
+
+        raw_value = batch.get('camera_intrinsics')
+        if raw_value is not None:
+            raw_tensor = self._to_float_tensor(raw_value, device)
+            raw_mask = self._extract_camera_mask(batch, 'camera_intrinsics_mask', batch_size, device)
+            combined_mask = self._combine_masks(raw_mask, camera_size_mask)
+            raw_tensor, selection_mask = self._filter_tensor_with_mask(raw_tensor, combined_mask, 'camera_intrinsics')
+            if raw_tensor is None:
+                return None
+
+            if raw_tensor.dim() == 3 and raw_tensor.size(-1) == 3 and raw_tensor.size(-2) == 3:
+                if camera_size is None:
+                    self.logger.debug("[Camera] Missing camera_size, cannot convert raw intrinsics to normalized form.")
+                    return None
+                size_tensor = self._filter_camera_size_subset(camera_size, camera_size_mask, selection_mask, require_all=True)
+                if size_tensor is None:
+                    self.logger.debug("[Camera] Missing valid camera_size rows for raw intrinsics.")
+                    return None
+                width = torch.clamp(size_tensor[:, 0:1], min=1e-6)
+                height = torch.clamp(size_tensor[:, 1:2], min=1e-6)
+                fx_norm = raw_tensor[:, 0, 0:1] / width
+                fy_norm = raw_tensor[:, 1, 1:2] / height
+                cx_norm = raw_tensor[:, 0, 2:3] / width
+                cy_norm = raw_tensor[:, 1, 2:3] / height
+                gt_tensor = torch.cat([fx_norm, fy_norm, cx_norm, cy_norm], dim=1)
+                pred_tensor = self._filter_prediction_with_mask(camera_pred, selection_mask, 'camera_intrinsics')
+                if pred_tensor is not None:
+                    return pred_tensor, gt_tensor.contiguous(), size_tensor
+            else:
+                gt_tensor = self._align_camera_tensor(raw_tensor, batch_size, 4, 'camera_intrinsics')
+                if gt_tensor is not None:
+                    gt_tensor, selection_mask = self._filter_tensor_with_mask(gt_tensor, raw_mask, 'camera_intrinsics')
+                    if gt_tensor is not None:
+                        pred_tensor = self._filter_prediction_with_mask(camera_pred, selection_mask, 'camera_intrinsics')
+                        if pred_tensor is not None:
+                            size_tensor = self._filter_camera_size_subset(camera_size, camera_size_mask, selection_mask)
+                            return pred_tensor, gt_tensor.contiguous(), size_tensor
+
+        return None
 
     def train_epoch(self, train_depth_loader: DataLoader, train_seg_loader: DataLoader, epoch: int) -> tuple:
         from .train_utils import set_epoch_for_samplers
@@ -253,13 +484,13 @@ class MultiTaskTrainer(BaseTrainer):
                 mask_depth = (gt_depth > 0) & (gt_depth >= self.config.min_depth) & (gt_depth <= self.config.max_depth)
                 loss_depth = self.depth_criterion(pred_depth, gt_depth, mask_depth)
 
-                if self.config.camera_head_mode.lower() != 'none' and \
-                        'camera_intrinsics_norm' in outputs_depth and \
-                        batch_depth.get('camera_intrinsics_norm') is not None:
-                    gt_camera = batch_depth['camera_intrinsics_norm'].cuda()
+                if self.config.camera_head_mode.lower() != 'none' and 'camera_intrinsics_norm' in outputs_depth:
                     camera_pred = outputs_depth['camera_intrinsics_norm']
-                    camera_loss = self.camera_criterion(camera_pred, gt_camera)
-                    loss_depth = loss_depth + float(self.config.camera_loss_weight) * camera_loss
+                    camera_batch = self._prepare_camera_targets(batch_depth, camera_pred)
+                    if camera_batch is not None:
+                        pred_aligned, gt_camera, camera_size = camera_batch
+                        camera_loss = self._compute_camera_loss(pred_aligned, gt_camera, camera_size)
+                        loss_depth = loss_depth + float(self.config.camera_loss_weight) * camera_loss
 
                 weighted_loss_depth = self.loss_weighter.get_loss(
                     loss_depth, torch.tensor(0.0, device=loss_depth.device), task='depth'
@@ -353,6 +584,45 @@ class MultiTaskTrainer(BaseTrainer):
                 bad.append(name)
         return bad
 
+    def _compute_camera_loss(self, camera_pred: torch.Tensor, camera_gt: torch.Tensor, camera_size: Optional[torch.Tensor]) -> torch.Tensor:
+        if camera_size is not None:
+            if camera_size.dim() == 1:
+                camera_size = camera_size.unsqueeze(0)
+            width = camera_size[:, 0:1].to(camera_pred.device)
+            height = camera_size[:, 1:2].to(camera_pred.device)
+        else:
+            width = None
+            height = None
+
+        if width is not None and height is not None:
+            pred_fx = camera_pred[:, 0:1] * width
+            pred_fy = camera_pred[:, 1:2] * height
+            pred_cx = camera_pred[:, 2:3] * width
+            pred_cy = camera_pred[:, 3:4] * height
+
+            gt_fx = camera_gt[:, 0:1] * width
+            gt_fy = camera_gt[:, 1:2] * height
+            gt_cx = camera_gt[:, 2:3] * width
+            gt_cy = camera_gt[:, 3:4] * height
+        else:
+            pred_fx, pred_fy, pred_cx, pred_cy = camera_pred.split(1, dim=1)
+            gt_fx, gt_fy, gt_cx, gt_cy = camera_gt.split(1, dim=1)
+
+        loss_type = getattr(self, '_camera_loss_type', 'l1')
+        rel_fx = self._camera_component_loss(pred_fx, gt_fx, loss_type)
+        rel_fy = self._camera_component_loss(pred_fy, gt_fy, loss_type)
+        rel_cx = self._camera_component_loss(pred_cx, gt_cx, loss_type)
+        rel_cy = self._camera_component_loss(pred_cy, gt_cy, loss_type)
+
+        return (rel_fx + rel_fy + rel_cx + rel_cy).mean()
+
+    def _camera_component_loss(self, pred: torch.Tensor, gt: torch.Tensor, loss_type: str) -> torch.Tensor:
+        eps = self._camera_eps
+        if loss_type == 'l2':
+            denom = torch.square(gt).clamp_min(eps)
+            return torch.square(pred - gt) / denom
+        return torch.abs(pred - gt) / (torch.abs(gt) + eps)
+
     def _log_step_uwl(self) -> None:
         """Log UWL variables and weights per step under a separate category.
         Uses a single add_scalars call to minimize overhead. Only rank 0 logs.
@@ -425,16 +695,35 @@ class MultiTaskTrainer(BaseTrainer):
                     depth_gt = batch["depth"].cuda()
                     outputs = self.model(input_img, task='depth')
                     depth_pred = outputs['depth']
+
+                    # Sanitize depth predictions to avoid propagating NaNs/Infs into the loss.
+                    min_depth_cfg = float(getattr(self.config, 'min_depth', 0.0) or 0.0)
+                    max_depth_cfg = getattr(self.config, 'max_depth', None)
+                    nan_to_num_kwargs = {'nan': 0.0}
+                    if max_depth_cfg is not None:
+                        max_depth_val = float(max_depth_cfg)
+                        if math.isfinite(max_depth_val):
+                            nan_to_num_kwargs['posinf'] = max_depth_val
+                    depth_pred = torch.nan_to_num(depth_pred, **nan_to_num_kwargs)
+                    if math.isfinite(min_depth_cfg):
+                        depth_pred = depth_pred.clamp_min_(min_depth_cfg)
+                    else:
+                        depth_pred = depth_pred.clamp_min_(0.0)
+                    if max_depth_cfg is not None:
+                        max_depth_val = float(max_depth_cfg)
+                        if math.isfinite(max_depth_val):
+                            depth_pred = depth_pred.clamp_max_(max_depth_val * 1.25)
+
                     valid_mask = (depth_gt > 0) & (depth_gt >= self.config.min_depth) & (depth_gt <= self.config.max_depth)
                     loss = criterion(depth_pred, depth_gt, valid_mask)
 
-                    if self.config.camera_head_mode.lower() != 'none' and \
-                            'camera_intrinsics_norm' in outputs and \
-                            batch.get('camera_intrinsics_norm') is not None:
-                        gt_camera = batch['camera_intrinsics_norm'].cuda()
+                    if self.config.camera_head_mode.lower() != 'none' and 'camera_intrinsics_norm' in outputs:
                         camera_pred = outputs['camera_intrinsics_norm']
-                        camera_loss = self.camera_criterion(camera_pred, gt_camera)
-                        loss = loss + float(self.config.camera_loss_weight) * camera_loss
+                        camera_batch = self._prepare_camera_targets(batch, camera_pred)
+                        if camera_batch is not None:
+                            pred_aligned, gt_camera, camera_size = camera_batch
+                            camera_loss = self._compute_camera_loss(pred_aligned, gt_camera, camera_size)
+                            loss = loss + float(self.config.camera_loss_weight) * camera_loss
                 else:
                     seg_gt = batch["semseg_mask"].cuda().long()
                     outputs = self.model(input_img, task='seg')
@@ -452,6 +741,13 @@ class MultiTaskTrainer(BaseTrainer):
                 raw_weight = self.config.depth_loss_weight if task == 'depth' else self.config.seg_loss_weight
                 safe_weight = float(raw_weight) if isinstance(raw_weight, (int, float)) and raw_weight > 0 else 1.0
                 loss = loss * torch.tensor(safe_weight, device=loss.device, dtype=loss.dtype)
+
+            if not torch.isfinite(loss).item():
+                self.logger.warning(f"Non-finite {task} loss detected at step {i}; skipping backward/optimizer step.")
+                optimizer.zero_grad(set_to_none=True)
+                if extra_optimizer is not None:
+                    extra_optimizer.zero_grad(set_to_none=True)
+                continue
 
             if self.config.mixed_precision and self.scaler is not None:
                 self.scaler.scale(loss).backward()

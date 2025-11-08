@@ -84,18 +84,19 @@ def make_camera_info(width: int, height: int, fx: float, fy: float, cx: float, c
 CameraProvider = Callable[[Optional[str]], Optional[CameraInfo]]
 _CAMERA_INFO_REGISTRY: Dict[str, CameraProvider] = {}
 _AUTO_IMPORT_MODULES: Dict[str, str] = {
-    "scared": "dataset.scard",
-    "scard": "dataset.scard",
-    "stereomis": "dataset.stereo_mis",
-    "endovis2017": "dataset.endovis2017_dataset",
-    "endovis2018": "dataset.endovis2018_dataset",
-    "endonerf": "dataset.endonerf_dataset",
-    "dvpn": "dataset.dvpn_dataset",
-    "simcol": "dataset.simcol_dataset",
-    "c3vd": "dataset.c3vd_metadata",
-    "c3vdv2": "dataset.c3vd_metadata",
-    "kidney3d": "dataset.kidney3d_metadata",
-    "endomapper": "dataset.endomapper_metadata",
+    "scared": "dataset.metadata.scared",
+    "scard": "dataset.metadata.scared",
+    "stereomis": "dataset.metadata.stereomis",
+    "endovis2017": "dataset.metadata.endovis2017",
+    "endovis2018": "dataset.metadata.endovis2018",
+    "endonerf": "dataset.metadata.endonerf",
+    "dvpn": "dataset.metadata.dvpn",
+    "simcol": "dataset.metadata.simcol",
+    "c3vd": "dataset.metadata.c3vd",
+    "c3vdv2": "dataset.metadata.c3vd",
+    "kidney3d": "dataset.metadata.kidney3d",
+    "endomapper": "dataset.metadata.endomapper",
+    "hamlyn": "dataset.metadata.hamlyn",
 }
 
 

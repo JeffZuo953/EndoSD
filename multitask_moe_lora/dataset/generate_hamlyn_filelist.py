@@ -12,9 +12,9 @@
 """
 
 import argparse
-import os
+from collections import OrderedDict
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 
 def generate_hamlyn_filelist(base_dir, output_file, sequences=None):
@@ -27,7 +27,11 @@ def generate_hamlyn_filelist(base_dir, output_file, sequences=None):
         sequences (list): 要包含的序列名称列表，如果为 None 则包含所有序列
     """
     file_list = []
-    base_path = Path(base_dir)
+    base_path = Path(base_dir).expanduser()
+    try:
+        base_path = base_path.resolve()
+    except OSError:
+        base_path = base_path.absolute()
 
     # 如果没有指定序列，则查找所有 rectified 序列
     if sequences is None:
@@ -40,36 +44,40 @@ def generate_hamlyn_filelist(base_dir, output_file, sequences=None):
             print(f"警告: 序列目录不存在: {seq_dir}")
             continue
 
-        color_dir = _resolve_subdirectory(seq_dir, ("color", "image"))
-        depth_dir = _resolve_subdirectory(seq_dir, ("depth",))
-
-        if color_dir is None:
-            print(f"警告: 找不到图像目录 (color/image*) 于: {seq_dir}")
+        pairs = _discover_image_depth_pairs(seq_dir)
+        if not pairs:
+            print(f"警告: 在 {seq_dir} 中未找到匹配的图像/深度目录")
             continue
 
-        if depth_dir is None:
-            print(f"警告: 找不到深度目录 (depth*) 于: {seq_dir}")
-            continue
+        seq_total = 0
 
-        img_files = _gather_files(color_dir, exts=("*.jpg", "*.jpeg", "*.png"))
+        for token, image_dir, depth_dir in pairs:
+            img_files = _gather_files(image_dir, exts=("*.jpg", "*.jpeg", "*.png"))
 
-        if len(img_files) == 0:
-            print(f"警告: 在 {color_dir} 中没有找到图像文件 (*.jpg/*.png)")
-            continue
-
-        print(f"处理序列: {seq_dir.name}")
-        print(f"  找到 {len(img_files)} 个图像文件")
-
-        for img_file in img_files:
-            frame_id = img_file.stem  # 不带扩展名的文件名
-
-            # 检查对应的深度文件是否存在
-            depth_file = _resolve_matching_file(depth_dir, frame_id)
-            if depth_file is None:
-                print(f"  警告: 缺少深度文件: {depth_dir}/{frame_id}.*")
+            if len(img_files) == 0:
+                print(f"警告: 在 {image_dir} 中没有找到图像文件 (*.jpg/*.png)")
                 continue
 
-            file_list.append(f"{seq_dir} {frame_id}\n")
+            print(f"处理序列: {seq_dir.name} / {image_dir.name}")
+            print(f"  找到 {len(img_files)} 个图像文件")
+
+            for img_file in img_files:
+                frame_id = img_file.stem  # 不带扩展名的文件名
+
+                # 检查对应的深度文件是否存在
+                depth_file = _resolve_matching_file(depth_dir, frame_id)
+                if depth_file is None:
+                    print(f"  警告: 缺少深度文件: {depth_dir}/{frame_id}.*")
+                    continue
+
+                frame_token = f"{token}/{frame_id}" if token else frame_id
+                file_list.append(f"{seq_dir.as_posix()} {frame_token}\n")
+                seq_total += 1
+
+        if seq_total == 0:
+            print(f"  提示: 跳过 {seq_dir.name}，未找到有效的图像-深度配对。")
+        else:
+            print(f"  序列 {seq_dir.name} 累计样本数: {seq_total}")
 
     # 写入文件
     output_path = Path(output_file)
@@ -135,19 +143,93 @@ def main():
     generate_hamlyn_filelist(args.base_dir, args.output, sequences)
 
 
-def _resolve_subdirectory(base_path: Path, prefixes: Iterable[str]) -> Optional[Path]:
-    for name in prefixes:
-        candidate = base_path / name
-        if candidate.is_dir():
-            return candidate
+def _discover_image_depth_pairs(seq_dir: Path) -> List[Tuple[str, Path, Path]]:
+    image_dirs = _find_candidate_directories(seq_dir, ("color", "image"))
+    if not image_dirs:
+        return []
 
-    candidates = [
-        child for child in base_path.iterdir()
-        if child.is_dir() and any(child.name.lower().startswith(name.lower()) for name in prefixes)
-    ]
-    if not candidates:
-        return None
-    return sorted(candidates)[0]
+    depth_dirs = _find_candidate_directories(seq_dir, ("depth",))
+    if not depth_dirs:
+        print(f"警告: 在 {seq_dir} 中未找到深度目录 (depth*)")
+        return []
+
+    depth_lookup = {name.lower(): path for name, path in depth_dirs.items()}
+    default_depth = depth_lookup.get("depth") or next(iter(depth_lookup.values()), None)
+
+    pairs: List[Tuple[str, Path, Path]] = []
+    multiple = len(image_dirs) > 1
+
+    for name, image_path in image_dirs.items():
+        lower_name = name.lower()
+        token = ""
+        if multiple or not lower_name.startswith("color"):
+            token = name
+
+        depth_path = _match_depth_directory(lower_name, depth_lookup, default_depth)
+        if depth_path is None:
+            print(f"  警告: 序列 {seq_dir.name} 的图像目录 {name} 找不到对应的深度目录，跳过该子目录。")
+            continue
+        pairs.append((token, image_path, depth_path))
+
+    return pairs
+
+
+def _find_candidate_directories(base_path: Path, prefixes: Tuple[str, ...]) -> OrderedDict[str, Path]:
+    result: OrderedDict[str, Path] = OrderedDict()
+    lowercase_seen: set[str] = set()
+
+    for child in sorted(base_path.iterdir(), key=lambda p: p.name.lower()):
+        if not child.is_dir():
+            continue
+        lower = child.name.lower()
+        if any(lower == pref or lower.startswith(pref) for pref in prefixes):
+            if lower not in lowercase_seen:
+                result[child.name] = child
+                lowercase_seen.add(lower)
+
+    for pref in prefixes:
+        candidate = base_path / pref
+        if candidate.is_dir():
+            lower = pref.lower()
+            if lower not in lowercase_seen:
+                result[pref] = candidate
+                lowercase_seen.add(lower)
+
+    return result
+
+
+def _match_depth_directory(image_key: str, depth_lookup: Dict[str, Path], default_depth: Optional[Path]) -> Optional[Path]:
+    candidates: List[str] = []
+
+    if image_key in depth_lookup:
+        candidates.append(image_key)
+
+    if image_key.startswith("image"):
+        suffix = image_key[len("image") :]
+        suffix_clean = suffix.lstrip("_-")
+        for candidate in (suffix, suffix_clean, f"depth{suffix}", f"depth{suffix_clean}"):
+            if candidate and candidate in depth_lookup:
+                candidates.append(candidate)
+        digits = "".join(ch for ch in suffix if ch.isdigit())
+    else:
+        digits = "".join(ch for ch in image_key if ch.isdigit())
+
+    if digits:
+        for variant in {
+            digits,
+            digits.zfill(2),
+            digits.lstrip("0") or "0",
+            f"depth{digits}",
+            f"depth{digits.zfill(2)}",
+        }:
+            if variant and variant in depth_lookup:
+                candidates.append(variant)
+
+    for candidate in candidates:
+        if candidate in depth_lookup:
+            return depth_lookup[candidate]
+
+    return default_depth
 
 
 def _gather_files(directory: Path, exts: Iterable[str]) -> list[Path]:

@@ -48,3 +48,5 @@ def run_training_loop(
         checkpoint_manager.update_and_save(epoch, train_losses, depth_metrics_all, seg_metrics)
 
     logger.info("Training loop completed.")
+    if hasattr(checkpoint_manager, "log_saved_checkpoints"):
+        checkpoint_manager.log_saved_checkpoints()

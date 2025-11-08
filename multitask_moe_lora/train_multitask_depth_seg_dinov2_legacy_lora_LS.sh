@@ -45,7 +45,8 @@ DEPTH_LOSS_WEIGHT=1.0
 SEG_LOSS_WEIGHT=1.0
 DWA_TEMPERATURE=2.0
 
-BASE_DATA_PATH="/data/ziyi/multitask"
+BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
+HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
 PRETRAINED_WEIGHTS="${BASE_DATA_PATH}/pretained/depth_anything_v2_metric_hypersim_vits.pth"
 RESUME_CHECKPOINT="/data/ziyi/multitask/save/train_lesion/multitask_LS_vits_legacy-lora_uwl_20251030_124733/checkpoint_full_epoch_400.pth"
 

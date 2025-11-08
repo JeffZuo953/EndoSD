@@ -22,14 +22,27 @@ class TrainingConfig:
     frozen_backbone: bool = False
     seg_input_type: str = "last_four"
     camera_head_mode: str = "none"
+    camera_loss_type: str = "l1"
 
     # 模式选择参数
-    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "moe-only", "lora-moe"
+    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "moe-only", "lora-moe", "endo-unid"
 
     # LoRA 参数
     use_lora: bool = False  # 由mode参数自动设置
     lora_r: int = 0
     lora_alpha: int = 1
+
+    # EndoUniD 专用参数
+    endo_unid_shared_shards: int = 1
+    endo_unid_shared_r: int = 4
+    endo_unid_shared_alpha: int = 8
+    endo_unid_depth_r: int = 8
+    endo_unid_depth_alpha: int = 16
+    endo_unid_seg_r: int = 8
+    endo_unid_seg_alpha: int = 16
+    endo_unid_camera_r: int = 4
+    endo_unid_camera_alpha: int = 8
+    endo_unid_dropout: float = 0.0
 
     # MoE 参数
     use_moe: bool = False  # 由mode参数自动设置
@@ -57,7 +70,8 @@ class TrainingConfig:
     seg_loss_weight: float = 1.0
     dwa_temperature: float = 2.0  # DWA的温度参数
     camera_loss_weight: float = 1.0
-    
+    tolerate_validation_errors: bool = False
+
     # 数据参数
     img_size: int = 518
     dataset_config_name: str = "server_hk_01"
@@ -104,15 +118,41 @@ def create_parser() -> argparse.ArgumentParser:
                         default="none",
                         choices=["none", "simple", "vggtlike", "vggt-like"],
                         help="Camera head variant: none, simple transformer, or VGGT-like head")
+    parser.add_argument("--camera-loss-type",
+                        default="l1",
+                        choices=["l1", "l2"],
+                        help="Camera-head loss type (relative L1 or relative L2)")
 
     # 模式选择和PEFT参数
     parser.add_argument("--mode",
                         default="original",
-                        choices=["original", "lora-only", "legacy-lora", "moe-only", "lora-moe"],
-                        help="Training mode: original (no PEFT), lora-only, legacy-lora (attention-only LoRA), moe-only, or lora-moe")
+                        choices=["original", "lora-only", "legacy-lora", "moe-only", "lora-moe", "endo-unid"],
+                        help="Training mode: original, lora-only, legacy-lora (attention-only LoRA), moe-only, lora-moe, or endo-unid (task-split LoRA)")
 
     parser.add_argument("--lora-r", default=4, type=int, help="LoRA rank (r)")
     parser.add_argument("--lora-alpha", default=8, type=int, help="LoRA alpha")
+
+    # EndoUniD specific knobs
+    parser.add_argument("--endo-unid-shared-shards", default=2, type=int,
+                        help="Number of shards for shared adapters in EndoUniD mode")
+    parser.add_argument("--endo-unid-shared-r", default=4, type=int,
+                        help="Shared adapter rank for EndoUniD")
+    parser.add_argument("--endo-unid-shared-alpha", default=8, type=int,
+                        help="Shared adapter alpha for EndoUniD")
+    parser.add_argument("--endo-unid-depth-r", default=8, type=int,
+                        help="Depth-only adapter rank for EndoUniD")
+    parser.add_argument("--endo-unid-depth-alpha", default=16, type=int,
+                        help="Depth-only adapter alpha for EndoUniD")
+    parser.add_argument("--endo-unid-seg-r", default=8, type=int,
+                        help="Seg-only adapter rank for EndoUniD")
+    parser.add_argument("--endo-unid-seg-alpha", default=16, type=int,
+                        help="Seg-only adapter alpha for EndoUniD")
+    parser.add_argument("--endo-unid-camera-r", default=4, type=int,
+                        help="Camera-head adapter rank for EndoUniD")
+    parser.add_argument("--endo-unid-camera-alpha", default=8, type=int,
+                        help="Camera-head adapter alpha for EndoUniD")
+    parser.add_argument("--endo-unid-dropout", default=0.0, type=float,
+                        help="Adapter dropout for EndoUniD LoRA")
 
     parser.add_argument("--num-experts", default=8, type=int, help="Number of experts in MoE")
     parser.add_argument("--top-k", default=2, type=int, help="Number of experts to use for each token")
@@ -174,7 +214,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local-cache-dir",
                         type=str,
                         default=os.environ.get("LOCAL_CACHE_DIR") or os.environ.get("LOCAL_CACHE_PATH"),
-                        help="Optional directory for local .pt cache mirroring.")
+                        help="Optional local directory for mirroring remote caches / samples (.pt). Falls back to LOCAL_CACHE_DIR or LOCAL_CACHE_PATH env vars.")
 
     # 其他参数
     parser.add_argument("--resume-from", type=str, required=False, help="Path to checkpoint to resume training from or load pretrained weights")
@@ -183,6 +223,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local-rank", default=0, type=int)
     parser.add_argument("--port", default=None, type=int)
     parser.add_argument("--mixed-precision", action="store_true", help="Use mixed precision training")
+    parser.add_argument("--tolerate-validation-errors", action="store_true",
+                        help="Skip over validation batches that raise errors instead of aborting training")
     parser.add_argument("--dinov3-repo-path", type=str, default="/media/ExtHDD1/jianfu/depth/DepthAnythingV2/dinov3", help="Path to the local dinov3 repository")
     parser.add_argument("--demo-output-root", type=str, default=None, help="Optional root directory to store demo / sample visualizations")
 
@@ -194,7 +236,10 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
 
     # 根据mode参数设置use_lora和use_moe
     mode = getattr(args, 'mode', 'original')
-    if mode == 'lora-only':
+    if mode == 'endo-unid':
+        use_lora = True
+        use_moe = False
+    elif mode == 'lora-only':
         use_lora = True
         use_moe = False
     elif mode == 'legacy-lora':
@@ -227,6 +272,7 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           frozen_backbone=getattr(args, 'frozen_backbone', False),
                           seg_input_type=getattr(args, 'seg_input_type', "last_four"),
                           camera_head_mode=getattr(args, 'camera_head_mode', "none").lower(),
+                          camera_loss_type=getattr(args, 'camera_loss_type', "l1").lower(),
                           mode=mode,
                           use_lora=use_lora,
                           use_moe=use_moe,
@@ -263,13 +309,24 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           val_dataset_include=val_include_list,
                           local_cache_dir=getattr(args, 'local_cache_dir', None),
                           demo_output_root=getattr(args, 'demo_output_root', None),
+                          tolerate_validation_errors=getattr(args, 'tolerate_validation_errors', False),
                           resume_from=getattr(args, 'resume_from', ""),
                           resume_full_state=getattr(args, 'resume_full_state', False),
                           save_path=getattr(args, 'save_path', ""),
                           local_rank=getattr(args, 'local_rank', 0),
                           port=getattr(args, 'port', None),
                           mixed_precision=getattr(args, 'mixed_precision', False),
-                          dinov3_repo_path=getattr(args, 'dinov3_repo_path', "/media/ExtHDD1/jianfu/depth/DepthAnythingV2/dinov3"))
+                          dinov3_repo_path=getattr(args, 'dinov3_repo_path', "/media/ExtHDD1/jianfu/depth/DepthAnythingV2/dinov3"),
+                          endo_unid_shared_shards=getattr(args, 'endo_unid_shared_shards', 1),
+                          endo_unid_shared_r=getattr(args, 'endo_unid_shared_r', 4),
+                          endo_unid_shared_alpha=getattr(args, 'endo_unid_shared_alpha', 8),
+                          endo_unid_depth_r=getattr(args, 'endo_unid_depth_r', 8),
+                          endo_unid_depth_alpha=getattr(args, 'endo_unid_depth_alpha', 16),
+                          endo_unid_seg_r=getattr(args, 'endo_unid_seg_r', 8),
+                          endo_unid_seg_alpha=getattr(args, 'endo_unid_seg_alpha', 16),
+                          endo_unid_camera_r=getattr(args, 'endo_unid_camera_r', 4),
+                          endo_unid_camera_alpha=getattr(args, 'endo_unid_camera_alpha', 8),
+                          endo_unid_dropout=getattr(args, 'endo_unid_dropout', 0.0))
 
 
 def validate_config(config: TrainingConfig) -> List[str]:
@@ -320,6 +377,23 @@ def validate_config(config: TrainingConfig) -> List[str]:
     valid_camera_modes = {"none", "simple", "vggtlike", "vggt-like"}
     if config.camera_head_mode.lower() not in valid_camera_modes:
         errors.append(f"camera_head_mode must be one of {sorted(valid_camera_modes)}")
+    if config.camera_loss_type.lower() not in {"l1", "l2"}:
+        errors.append("camera_loss_type must be either 'l1' or 'l2'")
+
+    # EndoUniD checks
+    if config.mode == "endo-unid":
+        if config.encoder not in {"vits", "vitb"}:
+            errors.append("EndoUniD mode currently only supports vits or vitb encoders")
+        if config.endo_unid_shared_shards <= 0:
+            errors.append("endo_unid_shared_shards must be positive")
+        for label, rank in [("shared", config.endo_unid_shared_r),
+                            ("depth", config.endo_unid_depth_r),
+                            ("seg", config.endo_unid_seg_r),
+                            ("camera", config.endo_unid_camera_r)]:
+            if rank < 0:
+                errors.append(f"EndoUniD {label} rank must be non-negative")
+        if config.endo_unid_dropout < 0 or config.endo_unid_dropout > 1:
+            errors.append("endo_unid_dropout must be within [0, 1]")
 
     return errors
 

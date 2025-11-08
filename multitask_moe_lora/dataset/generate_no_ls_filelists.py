@@ -237,9 +237,17 @@ def generate_endovis2017_filelists(root: Path,
 
 def _iter_endovis2018(root: Path, split: str) -> Iterable[Tuple[Path, Path, Path]]:
     image_root = root / "EndoVis2018_ISINet_tool" / "EndoVis_2018_ISINet_tool" / split
-    depth_root = root / "depth" / "EndoVis2018_Scene_seg"
+    rectified_root = root / "endovis2018_seg_depth" / "output_rectified"
+    rectified_image_dir = rectified_root / "left"
+    rectified_mask_dir = rectified_root / "left_mask"
+    rectified_mask_alt_dir = rectified_root / "left_mask_reid"
+    depth_root = root / "refictied_depth" / "left"
     if not image_root.exists():
         raise FileNotFoundError(f"EndoVis2018 split folder not found: {image_root}")
+    if not rectified_image_dir.exists():
+        raise FileNotFoundError(f"Rectified image directory not found: {rectified_image_dir}")
+    if not depth_root.exists():
+        raise FileNotFoundError(f"Rectified depth directory not found: {depth_root}")
 
     image_dir = image_root / "images"
     ann_dir = image_root / "annotations"
@@ -247,31 +255,28 @@ def _iter_endovis2018(root: Path, split: str) -> Iterable[Tuple[Path, Path, Path
         raise FileNotFoundError(f"EndoVis2018 requires images/annotations under {image_root}")
 
     for image_path in sorted(image_dir.glob("*.png")):
-        mask_path = ann_dir / image_path.name
-        if not mask_path.exists():
-            continue
-
         parts = image_path.stem.split("_")
         if len(parts) < 3:
             continue
-        seq_id = parts[1]
-        frame_token = parts[-1].replace("frame", "")
+        frame_key = image_path.stem
 
-        depth_dir = depth_root.glob(f"**/seq_{seq_id}")
-        depth_folder = None
-        for candidate in depth_dir:
-            left_frames = candidate / "left_frames"
-            if left_frames.exists():
-                depth_folder = left_frames
-                break
-        if depth_folder is None:
+        rectified_image = rectified_image_dir / f"{frame_key}.png"
+        if not rectified_image.exists():
             continue
 
-        depth_path = depth_folder / f"frame{frame_token}_depth.npy"
+        mask_path = rectified_mask_dir / f"{frame_key}.png"
+        if not mask_path.exists() and rectified_mask_alt_dir.exists():
+            alt_mask = rectified_mask_alt_dir / f"{frame_key}.png"
+            if alt_mask.exists():
+                mask_path = alt_mask
+        if not mask_path.exists():
+            continue
+
+        depth_path = depth_root / f"{frame_key}_depth.npy"
         if not depth_path.exists():
             continue
 
-        yield image_path, depth_path, mask_path
+        yield rectified_image, depth_path, mask_path
 
 
 def generate_endovis2018_filelists(root: Path,

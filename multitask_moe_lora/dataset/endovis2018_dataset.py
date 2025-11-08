@@ -1,7 +1,7 @@
-import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import cv2
 import numpy as np
@@ -9,20 +9,11 @@ import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
+from .camera_utils import CameraInfo, get_camera_info
 from .transform import NormalizeImage, PrepareForNet, Resize
-from .utils import compute_valid_mask, remap_labels, map_ls_semseg_to_10_classes
+from .utils import compute_valid_mask
 
-ENDOVIS2018_REMAP = {
-    0: 0,
-    1: 1,
-    2: 2,
-    3: 3,
-    4: 6,
-    5: 7,
-    6: 8,
-    7: 9,
-    255: 255,
-}
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -40,8 +31,11 @@ class EndoVis2018Dataset(Dataset):
 
     Args:
         root_dir: Path containing the official dataset structure. Must include
-                  ``EndoVis2018_ISINet_tool/EndoVis_2018_ISINet_tool`` and the
-                  ``depth`` directory with ``EndoVis2018_Scene_seg`` releases.
+                  ``EndoVis2018_ISINet_tool/EndoVis_2018_ISINet_tool`` for the split lists,
+                  the rectified frame directory
+                  ``endovis2018_seg_depth/output_rectified`` (with ``left`` and
+                  ``left_mask`` subfolders), and the generated depth maps under
+                  ``refictied_depth/left``.
         split: One of ``train``, ``val`` or ``all``.
         size: Target (width, height) for resizing.
         max_depth: Maximum depth (in meters) used for clipping and valid mask.
@@ -60,17 +54,47 @@ class EndoVis2018Dataset(Dataset):
         self.max_depth = max_depth
 
         self.image_root = self.root_dir / "EndoVis2018_ISINet_tool" / "EndoVis_2018_ISINet_tool"
-        self.depth_root = self.root_dir / "depth" / "EndoVis2018_Scene_seg"
+        default_rectified = self.root_dir / "endovis2018_seg_depth" / "output_rectified"
+        alt_rectified = self.root_dir / "output_rectified"
+        if default_rectified.exists():
+            self.rectified_root = default_rectified
+        elif alt_rectified.exists():
+            self.rectified_root = alt_rectified
+        else:
+            raise FileNotFoundError(
+                f"Rectified output directory not found under {default_rectified} or {alt_rectified}"
+            )
+        self.rectified_image_dir = self.rectified_root / "left"
+
+        mask_reid_dir = self.rectified_root / "left_mask_reid"
+        mask_legacy_dir = self.rectified_root / "left_mask"
+        if mask_reid_dir.exists():
+            self.rectified_mask_dir = mask_reid_dir
+            self.rectified_mask_alt_dir = mask_legacy_dir
+        elif mask_legacy_dir.exists():
+            self.rectified_mask_dir = mask_legacy_dir
+            self.rectified_mask_alt_dir = mask_reid_dir
+        else:
+            self.rectified_mask_dir = mask_reid_dir
+            self.rectified_mask_alt_dir = mask_legacy_dir
+        self.depth_root = self.root_dir / "refictied_depth" / "left"
 
         if not self.image_root.exists():
             raise FileNotFoundError(f"EndoVis2018 image root not found: {self.image_root}")
         if not self.depth_root.exists():
             raise FileNotFoundError(f"EndoVis2018 depth root not found: {self.depth_root}")
+        if not self.rectified_image_dir.exists():
+            raise FileNotFoundError(f"Rectified image directory not found: {self.rectified_image_dir}")
+        if not self.rectified_mask_dir.exists():
+            if self.rectified_mask_alt_dir.exists():
+                self.rectified_mask_dir = self.rectified_mask_alt_dir
+            else:
+                raise FileNotFoundError(f"Rectified mask directory not found: {self.rectified_mask_dir}")
 
         self.depth_map: Dict[str, Path] = self._build_depth_lookup()
-        self.intrinsics_map: Dict[str, torch.Tensor] = self._load_intrinsics_map()
-        self.label_map: Dict[int, int] = self._load_label_mapping()
         self.samples: List[_EndoVis2018Sample] = self._gather_samples()
+        self._camera_cache: Dict[str, Optional[CameraInfo]] = {}
+        self._missing_camera_sequences: Set[str] = set()
 
         net_w, net_h = size
         self.transform = Compose(
@@ -92,31 +116,13 @@ class EndoVis2018Dataset(Dataset):
 
     def _build_depth_lookup(self) -> Dict[str, Path]:
         depth_map: Dict[str, Path] = {}
-        for seq_dir in self.depth_root.glob("**/seq_*"):
-            if not seq_dir.is_dir():
-                continue
-            seq_id = seq_dir.name.split("_")[-1]
-            left_frames = seq_dir / "left_frames"
-            if left_frames.exists():
-                depth_map[seq_id] = left_frames
+        for depth_path in self.depth_root.glob("*.npy"):
+            stem = depth_path.stem
+            key = stem[:-6] if stem.endswith("_depth") else stem
+            depth_map[key] = depth_path
         if not depth_map:
-            raise RuntimeError("No depth sequences found for EndoVis2018.")
+            raise RuntimeError("No rectified depth files found for EndoVis2018.")
         return depth_map
-
-    def _load_label_mapping(self) -> Dict[int, int]:
-        labels_json = self.image_root / "labels.json"
-        if not labels_json.exists():
-            return {}
-
-        with open(labels_json, "r") as f:
-            entries = json.load(f)
-
-        mapping: Dict[int, int] = {}
-        for entry in entries:
-            class_id = entry.get("classid")
-            if class_id is not None:
-                mapping[int(class_id)] = int(class_id)
-        return mapping
 
     def _target_splits(self) -> List[str]:
         if self.split == "all":
@@ -140,28 +146,28 @@ class EndoVis2018Dataset(Dataset):
                 continue
 
             for image_path in sorted(image_dir.glob("*.png")):
-                mask_path = ann_dir / image_path.name
-                if not mask_path.exists():
-                    continue
-
                 parts = image_path.stem.split("_")
                 if len(parts) < 3:
                     continue
                 seq_id = parts[1]
                 frame_token = parts[-1].replace("frame", "")
+                frame_key = image_path.stem
 
-                depth_dir = self.depth_map.get(seq_id)
-                if depth_dir is None:
-                    continue
+                rectified_image = self.rectified_image_dir / f"{frame_key}.png"
+                rectified_mask = self.rectified_mask_dir / f"{frame_key}.png"
+                if not rectified_mask.exists() and self.rectified_mask_alt_dir.exists():
+                    alt_mask = self.rectified_mask_alt_dir / f"{frame_key}.png"
+                    if alt_mask.exists():
+                        rectified_mask = alt_mask
+                depth_path = self.depth_map.get(frame_key)
 
-                depth_path = depth_dir / f"frame{frame_token}_depth.npy"
-                if not depth_path.exists():
+                if depth_path is None or not rectified_image.exists() or not rectified_mask.exists():
                     continue
 
                 samples.append(
                     _EndoVis2018Sample(
-                        image_path=image_path,
-                        mask_path=mask_path,
+                        image_path=rectified_image,
+                        mask_path=rectified_mask,
                         depth_path=depth_path,
                         sequence_id=seq_id,
                         frame_token=frame_token,
@@ -171,54 +177,6 @@ class EndoVis2018Dataset(Dataset):
         if not samples:
             raise RuntimeError(f"No samples found for EndoVis2018 split '{self.split}'.")
         return samples
-
-    def _load_intrinsics_map(self) -> Dict[str, torch.Tensor]:
-        intrinsics_map: Dict[str, torch.Tensor] = {}
-        for calib_path in self.root_dir.glob("**/camera_calibration.txt"):
-            seq_dir = calib_path.parent
-            if not seq_dir.name.startswith("seq_"):
-                continue
-            seq_id = seq_dir.name.split("_")[-1]
-            if seq_id in intrinsics_map:
-                continue
-            intrinsics = self._parse_camera_calibration(calib_path)
-            if intrinsics is not None:
-                intrinsics_map[seq_id] = intrinsics
-        return intrinsics_map
-
-    @staticmethod
-    def _parse_camera_calibration(calib_path: Path) -> Optional[torch.Tensor]:
-        fx = fy = cx = cy = None
-        try:
-            with open(calib_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("//"):
-                        continue
-                    if line.startswith("Camera-0-F:"):
-                        parts = line.split(":", 1)[1].split("//")[0].strip().split()
-                        if len(parts) >= 2:
-                            fx, fy = map(float, parts[:2])
-                    elif line.startswith("Camera-0-C:"):
-                        parts = line.split(":", 1)[1].split("//")[0].strip().split()
-                        if len(parts) >= 2:
-                            cx, cy = map(float, parts[:2])
-                    if fx is not None and fy is not None and cx is not None and cy is not None:
-                        break
-        except OSError:
-            return None
-
-        if None in (fx, fy, cx, cy):
-            return None
-
-        return torch.tensor(
-            [
-                [fx, 0.0, cx],
-                [0.0, fy, cy],
-                [0.0, 0.0, 1.0],
-            ],
-            dtype=torch.float32,
-        )
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -236,8 +194,7 @@ class EndoVis2018Dataset(Dataset):
             raise FileNotFoundError(f"Unable to read mask: {sample.mask_path}")
         if mask_img.ndim == 3:
             mask_img = cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY)
-        mask = remap_labels(mask_img.astype(np.uint8), ENDOVIS2018_REMAP)
-        mask = map_ls_semseg_to_10_classes(mask, "EndoVis2018")
+        mask = mask_img.astype(np.uint8)
 
         depth = np.load(sample.depth_path).astype(np.float32)
         depth = np.clip(depth, 0.0, self.max_depth)
@@ -271,10 +228,34 @@ class EndoVis2018Dataset(Dataset):
             "source_type": "LS",
             "sequence": sample.sequence_id,
             "frame_token": sample.frame_token,
+            "dataset_name": "EndoVis2018",
         }
-        intrinsics_tensor = self.intrinsics_map.get(sample.sequence_id)
-        if intrinsics_tensor is not None:
+
+        camera_info = self._camera_cache.get(sample.sequence_id)
+        if camera_info is None:
+            camera_info = get_camera_info("endovis2018", str(sample.image_path))
+            self._camera_cache[sample.sequence_id] = camera_info
+
+        if camera_info is None:
+            seq_key = sample.sequence_id.lower()
+            if seq_key not in self._missing_camera_sequences:
+                logger.error("[EndoVis2018] Missing camera metadata for sequence '%s'; skipping intrinsics.", sample.sequence_id)
+                self._missing_camera_sequences.add(seq_key)
+        else:
+            intrinsics_tensor = camera_info.intrinsics.clone().to(torch.float32)
+            intrinsics_norm = camera_info.intrinsics_norm.clone().to(torch.float32)
+            camera_size = torch.tensor([float(camera_info.width), float(camera_info.height)], dtype=torch.float32)
+
             result["intrinsics"] = intrinsics_tensor
+            result["camera_intrinsics"] = intrinsics_tensor
+            result["camera_intrinsics_norm"] = intrinsics_norm
+            result["camera_size"] = camera_size.clone()
+            result["camera_size_original"] = camera_size.clone()
+            result["camera_original_image_size"] = camera_size.clone()
+            result["camera_image_size"] = torch.tensor(
+                [float(image_tensor.shape[-1]), float(image_tensor.shape[-2])],
+                dtype=torch.float32,
+            )
         return result
 
 

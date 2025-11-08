@@ -224,6 +224,7 @@ class FileListSegDepthDataset(Dataset):
 
         if cache_key and self._local_cache.enabled:
             self._local_cache.save_obj(cache_key, self._prepare_cache_payload(result))
+
         return result
 
     def _read_image(self, path: str) -> np.ndarray:
@@ -306,7 +307,15 @@ class FileListSegDepthDataset(Dataset):
 
         if mask.ndim == 3:
             mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-        return mask.astype(np.uint8)
+        mask = mask.astype(np.uint8)
+
+        if self.dataset_name and "kidney3d" in self.dataset_name.lower():
+            remapped = np.zeros_like(mask, dtype=np.uint8)
+            remapped[mask == 255] = 1
+            remapped[mask == 128] = 2
+            mask = remapped
+
+        return mask
     @staticmethod
     def _infer_dataset_name(path: str) -> str:
         norm_path = os.path.normpath(path)

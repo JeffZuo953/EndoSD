@@ -1,3 +1,5 @@
+from typing import Dict, List, Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -38,7 +40,8 @@ class DepthAnythingV2_MultiTask(nn.Module):
                  top_k: int = 2,
                  lora_r: int = 4,
                  lora_alpha: int = 8,
-                 camera_head_mode: str = "none"):
+                 camera_head_mode: str = "none",
+                 endo_unid_params: Optional[dict] = None):
         super(DepthAnythingV2_MultiTask, self).__init__()
 
         # 模型配置
@@ -48,9 +51,13 @@ class DepthAnythingV2_MultiTask(nn.Module):
         self.seg_input_type = seg_input_type
         self.mode = mode
         self.camera_head_mode = camera_head_mode.lower()
+        self.endo_unid_params = endo_unid_params or {}
+        self.endo_unid_enabled = self.mode == "endo-unid"
+        if self.endo_unid_enabled and self.encoder not in {"vits", "vitb"}:
+            raise ValueError("EndoUniD mode currently only supports vits or vitb encoders")
 
         # 根据mode参数解耦为内部参数
-        self.use_lora = mode in ['lora-only', 'legacy-lora', 'lora-moe']
+        self.use_lora = mode in ['lora-only', 'legacy-lora', 'lora-moe', 'endo-unid']
         self.use_moe = mode in ['moe-only', 'lora-moe']
         self.attention_only_lora = mode == 'legacy-lora'
 
@@ -81,6 +88,35 @@ class DepthAnythingV2_MultiTask(nn.Module):
             'dinov3_vith16plus': 32,
             'dinov3_vit7b16': 40
         }
+
+        # 语义分割头层索引预计算
+        self.seg_layer_idx_map = {
+            'vits': [8, 9, 10, 11],
+            'vitb': [8, 9, 10, 11],
+            'vitl': [20, 21, 22, 23],
+            'vitg': [36, 37, 38, 39],
+            'dinov3_vits16': [8, 9, 10, 11],
+            'dinov3_vits16plus': [8, 9, 10, 11],
+            'dinov3_vitb16': [8, 9, 10, 11],
+            'dinov3_vitl16': [20, 21, 22, 23],
+            'dinov3_vitl16plus': [20, 21, 22, 23],
+            'dinov3_vith16plus': [28, 29, 30, 31],
+            'dinov3_vit7b16': [36, 37, 38, 39]
+        }
+        total_layers = self.num_layers[self.encoder]
+        if self.seg_input_type == 'last':
+            self.seg_layer_idx = [total_layers - 1]
+        elif self.seg_input_type == 'last_four':
+            self.seg_layer_idx = self.seg_layer_idx_map.get(self.encoder, list(range(total_layers - 4, total_layers)))
+        elif self.seg_input_type == 'from_depth':
+            self.seg_layer_idx = self.depth_layer_idx[self.encoder]
+        else:
+            raise ValueError(f"Unknown seg_input_type: {self.seg_input_type}")
+
+        if self.endo_unid_enabled:
+            self.endo_unid_cfg = self._build_endo_unid_cfg()
+        else:
+            self.endo_unid_cfg = None
 
         # Patch size 配置
         self.patch_sizes = {
@@ -153,49 +189,36 @@ class DepthAnythingV2_MultiTask(nn.Module):
                     top_k=top_k,
                     lora_r=lora_r,
                     lora_alpha=lora_alpha,
+                    endo_unid_cfg=self.endo_unid_cfg,
                 )
         # 深度估计头
         patch_size = self.get_patch_size()
         self.depth_head = DPTHead(self.backbone.embed_dim, features, use_bn, out_channels=out_channels, use_clstoken=use_clstoken, patch_size=patch_size)
-
-        # 语义分割头 - 使用从 linear_head.py 导入的LinearBNHead
-        # 为分割任务定义独立的层索引
-        self.seg_layer_idx_map = {
-            'vits': [8, 9, 10, 11],
-            'vitb': [8, 9, 10, 11],
-            'vitl': [20, 21, 22, 23],
-            'vitg': [36, 37, 38, 39],
-            'dinov3_vits16': [8, 9, 10, 11],
-            'dinov3_vits16plus': [8, 9, 10, 11],
-            'dinov3_vitb16': [8, 9, 10, 11],
-            'dinov3_vitl16': [20, 21, 22, 23],
-            'dinov3_vitl16plus': [20, 21, 22, 23],
-            'dinov3_vith16plus': [28, 29, 30, 31],
-            'dinov3_vit7b16': [36, 37, 38, 39]
-        }
-
-        total_layers = self.num_layers[self.encoder]
-        if self.seg_input_type == 'last':
-            self.seg_layer_idx = [total_layers - 1]
-        elif self.seg_input_type == 'last_four':
-            # 使用精确的层索引以匹配'思路.md'
-            self.seg_layer_idx = self.seg_layer_idx_map.get(self.encoder, list(range(total_layers - 4, total_layers)))
-        elif self.seg_input_type == 'from_depth':
-            # 'from_depth' 模式保持不变，使用深度头的索引
-            self.seg_layer_idx = self.depth_layer_idx[self.encoder]
-        else:
-            raise ValueError(f"Unknown seg_input_type: {self.seg_input_type}")
 
         num_seg_layers = len(self.seg_layer_idx)
         seg_in_channels = [self.backbone.embed_dim] * num_seg_layers
 
         self.seg_head = LinearBNHead(in_channels=seg_in_channels, channels=features, num_classes=num_classes, in_index=list(range(num_seg_layers)))
 
+        camera_adapter_rank = self.endo_unid_params.get('camera_r', 0) if self.endo_unid_enabled else 0
+        camera_adapter_alpha = self.endo_unid_params.get('camera_alpha', 1) if self.endo_unid_enabled else 1
+        camera_adapter_dropout = self.endo_unid_params.get('dropout', 0.0) if self.endo_unid_enabled else 0.0
+
         # Optional camera head
         if self.camera_head_mode == "simple":
-            self.camera_head = SimpleCameraHead(self.backbone.embed_dim)
+            self.camera_head = SimpleCameraHead(
+                self.backbone.embed_dim,
+                adapter_rank=camera_adapter_rank,
+                adapter_alpha=camera_adapter_alpha,
+                adapter_dropout=camera_adapter_dropout,
+            )
         elif self.camera_head_mode in {"vggtlike", "vggt-like"}:
-            self.camera_head = VGGTLiteCameraHead(self.backbone.embed_dim)
+            self.camera_head = VGGTLiteCameraHead(
+                self.backbone.embed_dim,
+                adapter_rank=camera_adapter_rank,
+                adapter_alpha=camera_adapter_alpha,
+                adapter_dropout=camera_adapter_dropout,
+            )
             self.camera_head_mode = "vggtlike"
         elif self.camera_head_mode == "none":
             self.camera_head = None
@@ -205,7 +228,6 @@ class DepthAnythingV2_MultiTask(nn.Module):
     def get_patch_size(self):
         """获取当前编码器对应的 patch size"""
         return self.patch_sizes.get(self.encoder, 14)  # 默认为14
-        self.seg_head = LinearBNHead(in_channels=seg_in_channels, channels=features, num_classes=num_classes, in_index=list(range(num_seg_layers)))
 
     def forward_features(self, x, task='both'):
         """提取任务特定特征"""
@@ -223,15 +245,18 @@ class DepthAnythingV2_MultiTask(nn.Module):
         # 根据任务提取不同的层特征
         if task in ['depth', 'both']:
             # 深度任务使用指定的layers
+            self._set_adapter_scopes(['shared', 'depth'])
             depth_features = self.backbone.get_intermediate_layers(x, n=self.depth_layer_idx[self.encoder], return_class_token=True)
             depth_features = [(patch, cls) for patch, cls in depth_features]
             results['depth_features'] = depth_features
 
         if task in ['seg', 'both']:
             # 根据配置获取分割任务的特征
+            self._set_adapter_scopes(['shared', 'seg'])
             seg_features = self.backbone.get_intermediate_layers(x, n=self.seg_layer_idx, return_class_token=False)
             results['seg_features'] = seg_features
 
+        self._set_adapter_scopes(['shared'])
         return results, h, w
 
     def forward_depth(self, features, h, w):
@@ -344,6 +369,44 @@ class DepthAnythingV2_MultiTask(nn.Module):
 
         return results
 
+    def _build_endo_unid_cfg(self) -> Dict[str, dict]:
+        depth_layers = set(self.depth_layer_idx[self.encoder])
+        seg_layers = set(self.seg_layer_idx)
+        total_layers = self.num_layers[self.encoder]
+        block_scopes: Dict[int, List[str]] = {}
+        for idx in range(total_layers):
+            scopes: List[str] = []
+            if idx in depth_layers:
+                scopes.append('depth')
+            if idx in seg_layers:
+                scopes.append('seg')
+            if not scopes:
+                scopes.append('shared')
+            block_scopes[idx] = scopes
+        ranks = {
+            'shared': self.endo_unid_params.get('shared_r', self.endo_unid_params.get('endo_unid_shared_r', 4)),
+            'depth': self.endo_unid_params.get('depth_r', self.endo_unid_params.get('endo_unid_depth_r', 8)),
+            'seg': self.endo_unid_params.get('seg_r', self.endo_unid_params.get('endo_unid_seg_r', 8)),
+        }
+        alphas = {
+            'shared': self.endo_unid_params.get('shared_alpha', self.endo_unid_params.get('endo_unid_shared_alpha', 8)),
+            'depth': self.endo_unid_params.get('depth_alpha', self.endo_unid_params.get('endo_unid_depth_alpha', 16)),
+            'seg': self.endo_unid_params.get('seg_alpha', self.endo_unid_params.get('endo_unid_seg_alpha', 16)),
+        }
+        cfg = {
+            'block_scopes': block_scopes,
+            'ranks': ranks,
+            'alphas': alphas,
+            'shared_shards': self.endo_unid_params.get('shared_shards', self.endo_unid_params.get('endo_unid_shared_shards', 1)),
+            'dropout': self.endo_unid_params.get('dropout', self.endo_unid_params.get('endo_unid_dropout', 0.0)),
+            'default_scopes': ['shared'],
+        }
+        return cfg
+
+    def _set_adapter_scopes(self, scopes: List[str]) -> None:
+        if hasattr(self.backbone, "set_active_adapter_scopes"):
+            self.backbone.set_active_adapter_scopes(scopes)
+
     def get_depth_prediction(self, x):
         """仅获取深度预测"""
         return self.forward(x, task='depth')['depth']
@@ -379,7 +442,8 @@ class DepthAnythingV2_MultiTask_Frozen(DepthAnythingV2_MultiTask):
                  top_k=2,
                  lora_r=4,
                  lora_alpha=8,
-                 camera_head_mode: str = "none"):
+                 camera_head_mode: str = "none",
+                 endo_unid_params: Optional[dict] = None):
         # 直接传递所有参数给父类
         super(DepthAnythingV2_MultiTask_Frozen, self).__init__(
             encoder=encoder,
@@ -397,7 +461,8 @@ class DepthAnythingV2_MultiTask_Frozen(DepthAnythingV2_MultiTask):
             top_k=top_k,
             lora_r=lora_r,
             lora_alpha=lora_alpha,
-            camera_head_mode=camera_head_mode
+            camera_head_mode=camera_head_mode,
+            endo_unid_params=endo_unid_params
         )
 
         # 冻结backbone参数
@@ -439,7 +504,8 @@ def create_multitask_model(encoder='vits',
                            top_k: int = 2,
                            lora_r: int = 4,
                            lora_alpha: int = 8,
-                           camera_head_mode: str = "none"):
+                           camera_head_mode: str = "none",
+                           endo_unid_params: Optional[dict] = None):
     """
     创建多任务模型的便捷函数
     
@@ -524,6 +590,7 @@ def create_multitask_model(encoder='vits',
         'lora_r': lora_r,
         'lora_alpha': lora_alpha,
         'camera_head_mode': camera_head_mode,
+        'endo_unid_params': endo_unid_params,
     }
 
     if frozen_backbone:

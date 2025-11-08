@@ -233,11 +233,11 @@ def collect_counts() -> DatasetSpec:
         },
         "StereoMIS": {
             "domain": "LS",
-            "train": _count_cache_entries(Path("/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/all_cache.txt")),
+            "train": _count_cache_entries(Path("/data/ziyi/multitask/data/LS/StereoMIS/cache/cache_pt/all_cache.txt")),
         },
         "EndoVis2017": {
             "domain": "LS",
-            "train": _count_cache_entries(Path("/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/train_cache.txt")),
+            "train": _count_cache_entries(Path("/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt")),
         },
         "EndoVis2018-ISINet": {
             "domain": "LS",

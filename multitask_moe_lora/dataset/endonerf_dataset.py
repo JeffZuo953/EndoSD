@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -8,7 +9,8 @@ import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
-from .camera_utils import CameraInfo, make_camera_info, register_camera_provider
+from .camera_utils import CameraInfo, normalize_intrinsics
+from .metadata.endonerf import EndoNeRFCamera
 from .transform import NormalizeImage, PrepareForNet, Resize
 from .utils import compute_valid_mask
 
@@ -20,6 +22,9 @@ class _EndoNeRFSample:
     seg_path: Path
     depth_valid_path: Path
     sequence: str
+
+
+logger = logging.getLogger(__name__)
 
 
 class EndoNeRFDataset(Dataset):
@@ -41,6 +46,10 @@ class EndoNeRFDataset(Dataset):
         * valid_mask       : Backwards-compatible depth mask (depth_valid_mask ∧ compute_valid_mask)
     """
 
+    CAMERA_WIDTH: int = EndoNeRFCamera.WIDTH
+    CAMERA_HEIGHT: int = EndoNeRFCamera.HEIGHT
+    CAMERA_INFO: Optional[CameraInfo] = EndoNeRFCamera.get_camera_info()
+
     def __init__(
         self,
         root_dir: str | Path,
@@ -59,6 +68,7 @@ class EndoNeRFDataset(Dataset):
         self.size = size
         self.max_depth = max_depth
         self.samples: List[_EndoNeRFSample] = self._gather_samples(filelist_path)
+        self._camera_warning_emitted = False
 
         net_w, net_h = size
         self.transform = Compose(
@@ -147,14 +157,7 @@ class EndoNeRFDataset(Dataset):
     @staticmethod
     def get_camera_info(_: Optional[str] = None) -> Optional[CameraInfo]:
         """Return fixed camera intrinsics for EndoNeRF."""
-        return make_camera_info(
-            width=640,
-            height=512,
-            fx=569.46820041,
-            fy=569.46820041,
-            cx=320.0,
-            cy=256.0,
-        )
+        return EndoNeRFCamera.get_camera_info()
 
     @staticmethod
     def _load_allowed_images(filelist_path: Path) -> set[str]:
@@ -322,14 +325,20 @@ class EndoNeRFDataset(Dataset):
 
         camera_info = self.get_camera_info()
         if camera_info is not None:
-            result["camera_intrinsics"] = camera_info.intrinsics.clone()
-            result["camera_intrinsics_norm"] = camera_info.intrinsics_norm.clone()
+            intrinsics = camera_info.intrinsics.clone().to(torch.float32)
+            result["camera_intrinsics"] = intrinsics
+            result["camera_intrinsics_norm"] = normalize_intrinsics(intrinsics, camera_info.width, camera_info.height)
             result["camera_size"] = torch.tensor([camera_info.width, camera_info.height], dtype=torch.float32)
+            result["camera_size_original"] = torch.tensor([camera_info.width, camera_info.height], dtype=torch.float32)
+            result["camera_image_size"] = torch.tensor([float(image_tensor.shape[-1]), float(image_tensor.shape[-2])], dtype=torch.float32)
+            result["camera_original_image_size"] = torch.tensor([float(image.shape[1]), float(image.shape[0])], dtype=torch.float32)
+        elif not self._camera_warning_emitted:
+            logger.error("EndoNeRF metadata missing camera intrinsics; skipping camera fields.")
+            self._camera_warning_emitted = True
 
         return result
 
 
-register_camera_provider("endonerf", EndoNeRFDataset.get_camera_info)
 
 
 def _parse_args():

@@ -29,7 +29,7 @@ LEARNING_RATE=${LEARNING_RATE:-5e-6}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
 IMG_SIZE=${IMG_SIZE:-518}
 MAX_DEPTH=${MAX_DEPTH:-0.3}
-MIN_DEPTH=${MIN_DEPTH:-1e-8}
+MIN_DEPTH=${MIN_DEPTH:-1e-6}
 MIXED_PRECISION=${MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 
@@ -54,20 +54,21 @@ DATASET_MODALITY=${DATASET_MODALITY:-"fd"}       # depth-only foundation mode
 PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET_VALUE}
 
-TRAIN_DATASET_INCLUDE="SCARED,StereoMIS,dVPN,C3VDv2,SimCol,Kidney3D,EndoSynth"
-VAL_DATASET_INCLUDE="hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D"
+TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,dVPN,EndoVis2017,EndoVis2018,EndoSynth,C3VDv2,SimCol,Kidney3D"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper"}
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
 # ------------------------------------------------------------------------------
 BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
+HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
 PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vits.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
 # ------------------------------------------------------------------------------
 # Output logging
 # ------------------------------------------------------------------------------
-SAVE_ROOT=${SAVE_ROOT:-"/data/ziyi/FM_save/foundation_depth"}
+SAVE_ROOT=${SAVE_ROOT:-"${BASE_DATA_PATH}/save/FM"}
 RUN_ID=$(date +%Y%m%d_%H%M%S)
 SAVE_PATH="${SAVE_ROOT}/fd_${ENCODER}_${DATASET_CONFIG_NAME}_${RUN_ID}"
 mkdir -p "${SAVE_PATH}"

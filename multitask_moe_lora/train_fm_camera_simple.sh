@@ -13,59 +13,61 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=3
-CUDA_DEVICES="5,4,2"
-MASTER_PORT=20764
+NUM_GPUS=${NUM_GPUS:-3}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,1,2"}
+MASTER_PORT=${MASTER_PORT:-20764}
 
 # ------------------------------------------------------------------------------
 # Core training hyper-parameters
 # ------------------------------------------------------------------------------
-ENCODER="vits"        # {vits, vitb, vitl, dinov3_*}
-FEATURES=64
-EPOCHS=120
-BATCH_SIZE=24
-VAL_BATCH_SIZE=96
-LEARNING_RATE=5e-6
-WEIGHT_DECAY=0.01
-IMG_SIZE=518
-MAX_DEPTH=0.3
-MIN_DEPTH=1e-6
-MIXED_PRECISION=true
-FROZEN_BACKBONE=false
-CAMERA_HEAD_MODE="simple"
-CAMERA_LOSS_WEIGHT=5.0
-CAMERA_LR=1e-3
+ENCODER=${ENCODER:-"vits"}        # {vits, vitb, vitl, dinov3_*}
+FEATURES=${FEATURES:-64}
+EPOCHS=${EPOCHS:-120}
+BATCH_SIZE=${BATCH_SIZE:-24}
+VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-96}
+LEARNING_RATE=${LEARNING_RATE:-5e-6}
+WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
+IMG_SIZE=${IMG_SIZE:-518}
+MAX_DEPTH=${MAX_DEPTH:-0.3}
+MIN_DEPTH=${MIN_DEPTH:-1e-6}
+MIXED_PRECISION=${MIXED_PRECISION:-true}
+FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
+CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"simple"}
+CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-5.0}
+CAMERA_LOSS_TYPE=${CAMERA_LOSS_TYPE:-"l1"}   # l1 | l2
+CAMERA_LR=${CAMERA_LR:-1e-3}
 
-FM_SAMPLE_MODE="full"
-FM_SAMPLE_SIZE=10
-TRAIN_SAMPLE_STEP=150
-VAL_SAMPLE_STEP=20
-MAX_SAMPLES_PER_DATASET=""
+FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}
+FM_SAMPLE_SIZE=${FM_SAMPLE_SIZE:-10}
+TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-150}
+VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-20}
+MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
 
 # ------------------------------------------------------------------------------
 # Dataset configuration
 # NOTE: define `fd_depth_fm_v1` in util/data_utils.DATASET_PATHS to point to
 #       the exact caches/filelists for the datasets enumerated below.
 # ------------------------------------------------------------------------------
-DATASET_CONFIG_NAME="fd_depth_fm_v1"
-DATASET_MODALITY="fd"
-PATH_TRANSFORM_NAME="none"
+DATASET_CONFIG_NAME=${DATASET_CONFIG_NAME:-"fd_depth_fm_v1"}
+DATASET_MODALITY=${DATASET_MODALITY:-"fd"}
+PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET}
 
-TRAIN_DATASET_INCLUDE="SCARED,StereoMIS,dVPN,C3VDv2,SimCol,Kidney3D,EndoSynth"
-VAL_DATASET_INCLUDE="hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D"
+TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper"}
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
 # ------------------------------------------------------------------------------
-BASE_DATA_PATH="/data/ziyi/multitask"
-PRETRAINED_WEIGHTS="${BASE_DATA_PATH}/pretained/depth_anything_v2_vits.pth"
-RESUME_CHECKPOINT=""
+BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
+HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
+PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vits.pth"}
+RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
 # ------------------------------------------------------------------------------
 # Output logging
 # ------------------------------------------------------------------------------
-SAVE_ROOT=${SAVE_ROOT:-"/data/ziyi/multitask/save/FM"}
+SAVE_ROOT=${SAVE_ROOT:-"${BASE_DATA_PATH}/save/FM"}
 RUN_ID=$(date +%Y%m%d_%H%M%S)
 SAMPLE_TAG="camera_${CAMERA_HEAD_MODE}_train${TRAIN_SAMPLE_STEP}"
 SAVE_PATH="${SAVE_ROOT}/fd_${ENCODER}_${DATASET_CONFIG_NAME}_${SAMPLE_TAG}_${RUN_ID}"
@@ -86,7 +88,8 @@ echo "  Depth range:           [${MIN_DEPTH}, ${MAX_DEPTH}]"
 echo "  Mixed precision:       ${MIXED_PRECISION}"
 echo "  Frozen backbone:       ${FROZEN_BACKBONE}"
 echo "  Camera head:           ${CAMERA_HEAD_MODE} (weight=${CAMERA_LOSS_WEIGHT})"
-echo "  Camera LR:            ${CAMERA_LR}"
+echo "  Camera loss type:      ${CAMERA_LOSS_TYPE}"
+echo "  Camera LR:             ${CAMERA_LR}"
 echo "  Dataset config:        ${DATASET_CONFIG_NAME}"
 echo "  Dataset modality:      ${DATASET_MODALITY}"
 echo "  Train include list:    ${TRAIN_DATASET_INCLUDE}"
@@ -144,6 +147,7 @@ BASE_CMD=(
     --save-path "${SAVE_PATH}"
     --camera-head-mode "${CAMERA_HEAD_MODE}"
     --camera-loss-weight "${CAMERA_LOSS_WEIGHT}"
+    --camera-loss-type "${CAMERA_LOSS_TYPE}"
     --lr-camera "${CAMERA_LR}"
 )
 if [[ -n "${MAX_SAMPLES_PER_DATASET}" ]]; then

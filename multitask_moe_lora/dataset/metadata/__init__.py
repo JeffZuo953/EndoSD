@@ -10,14 +10,24 @@ from . import c3vd  # noqa: F401
 from . import kidney3d  # noqa: F401
 from . import endomapper  # noqa: F401
 from . import endovis2018  # noqa: F401
+from . import endovis2017  # noqa: F401
 from . import hamlyn  # noqa: F401
 from . import scared  # noqa: F401
+from . import dvpn  # noqa: F401
+from . import endonerf  # noqa: F401
+from . import simcol  # noqa: F401
+from . import stereomis  # noqa: F401
 
 __all__ = [
     "c3vd",
     "kidney3d",
     "endomapper",
     "endovis2018",
+    "endovis2017",
     "hamlyn",
     "scared",
+    "dvpn",
+    "endonerf",
+    "simcol",
+    "stereomis",
 ]

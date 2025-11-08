@@ -475,7 +475,7 @@ DATASETS: List[Dict[str, object]] = [
         "category": "Train/LS",
         "mode": "pt_cache",
         "list_paths": [
-            "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/all_cache.txt",
+            "/data/ziyi/multitask/data/LS/StereoMIS/cache/cache_pt/all_cache.txt",
         ],
     },
     {
@@ -483,7 +483,7 @@ DATASETS: List[Dict[str, object]] = [
         "category": "Train/LS",
         "mode": "pt_cache",
         "list_paths": [
-            "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/all_cache.txt",
+            "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/all_cache.txt",
         ],
     },
     {

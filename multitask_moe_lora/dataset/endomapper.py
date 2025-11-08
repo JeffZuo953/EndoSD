@@ -86,6 +86,8 @@ class Endomapper(Dataset):
         # 添加深度裁剪以确保范围一致
         depth = np.clip(depth, 0, self.max_depth)
 
+        height, width = image.shape[:2]
+
         # ====== Apply transforms ======
         sample = self.transform({"image": image, "depth": depth})
 
@@ -102,6 +104,7 @@ class Endomapper(Dataset):
         sample["max_depth"] = self.max_depth
         sample["dataset_name"] = self.dataset_name
         sample["source_type"] = self.dataset_type
+        sample["camera_size"] = torch.tensor([width, height], dtype=torch.float32)
 
         return sample
 

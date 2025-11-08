@@ -105,8 +105,18 @@ def compute_valid_mask(image: torch.Tensor,
     else:
         special_mask = torch.zeros_like(denorm_255[0], dtype=torch.bool)
 
-    max_depth_limit = 0.4 if max_depth is None else max(float(max_depth), 0.4)
-    depth_valid = torch.isfinite(depth) & (depth > min_depth) & (depth <= max_depth_limit)
+    min_depth_value = max(float(min_depth), 0.0)
+    max_depth_value = float("inf") if max_depth is None else float(max_depth)
+
+    if dataset_key == "hamlyn":
+        min_depth_value = max(min_depth_value, 1e-3)
+        if max_depth is None:
+            max_depth_value = 0.3
+        else:
+            max_depth_value = min(max_depth_value, 0.3)
+        depth_valid = torch.isfinite(depth) & (depth >= min_depth_value) & (depth <= max_depth_value)
+    else:
+        depth_valid = torch.isfinite(depth) & (depth > min_depth_value) & (depth <= max_depth_value)
 
     dark_threshold = dark_int_threshold / 255.0
     dark_pixels = (denorm_image <= dark_threshold).all(dim=0)

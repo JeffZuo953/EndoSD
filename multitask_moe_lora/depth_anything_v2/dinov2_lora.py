@@ -8,9 +8,10 @@
 #   https://github.com/rwightman/pytorch-image-models/tree/master/timm/models/vision_transformer.py
 
 from functools import partial
+from contextlib import contextmanager
 import math
 import logging
-from typing import Sequence, Tuple, Union, Callable
+from typing import Sequence, Tuple, Union, Callable, Optional, Dict
 
 import torch
 import torch.nn as nn
@@ -23,6 +24,7 @@ from .dinov2_layers.mlp_lora import Mlp_LoRA
 from .dinov2_layers.swiglu_ffn_lora import SwiGLUFFNFused_LoRA
 from .dinov2_layers.attention_lora import MemEffAttention_LoRA
 from .dinov2_layers.block_lora import NestedTensorBlock_LoRA as Block_LoRA # Use LoRA block
+from .dinov2_layers.endo_unid_adapter import AdapterScopeController, EndoUniDBlock
 # Import original layers needed
 from .dinov2_layers import PatchEmbed # Assuming PatchEmbed doesn't need LoRA
 from .dinov2_layers.mlp import Mlp
@@ -83,6 +85,7 @@ class DinoVisionTransformer_LoRA(nn.Module):
         # --- MoE Args --- #
         num_experts: int = 8,
         top_k: int = 2,
+        endo_unid_cfg: Optional[dict] = None,
         **kwargs
     ):
         """
@@ -117,7 +120,12 @@ class DinoVisionTransformer_LoRA(nn.Module):
         # 根据mode参数解码配置项
         attention_only_lora = mode == 'legacy-lora'
 
-        if mode == 'lora-only' or attention_only_lora:
+        if mode == 'endo-unid':
+            use_lora = True
+            use_moe = False
+            lora_r = 0  # ranks handled per scope
+            lora_alpha = 1
+        elif mode == 'lora-only' or attention_only_lora:
             use_lora = True
             use_moe = False
             lora_r = lora_r if lora_r is not None else 4
@@ -143,9 +151,15 @@ class DinoVisionTransformer_LoRA(nn.Module):
 
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.mode = mode
+        self.is_endo_unid = mode == 'endo-unid'
         self.use_lora = use_lora
         self.use_moe = use_moe
         self.attention_only_lora = attention_only_lora
+        self.endo_unid_cfg = endo_unid_cfg if self.is_endo_unid else None
+        if self.is_endo_unid:
+            if self.endo_unid_cfg is None:
+                raise ValueError("EndoUniD mode requires endo_unid_cfg dictionary")
+            self.adapter_controller = AdapterScopeController(default=self.endo_unid_cfg.get('default_scopes', ['shared']))
 
         # Store MoE parameters for later use
         self.num_experts = kwargs.get('num_experts', num_experts)
@@ -262,6 +276,28 @@ class DinoVisionTransformer_LoRA(nn.Module):
         # Pass LoRA params to block_fn constructor，扩展为支持MoE参数
         blocks_list = []
         for i in range(depth):
+            if self.is_endo_unid:
+                block_scopes = self.endo_unid_cfg['block_scopes'].get(i, ['shared'])
+                scope_specs = self._build_endo_scope_specs(block_scopes)
+                block_kwargs = {
+                    'dim': embed_dim,
+                    'num_heads': num_heads,
+                    'mlp_ratio': mlp_ratio,
+                    'qkv_bias': qkv_bias,
+                    'proj_bias': proj_bias,
+                    'ffn_bias': ffn_bias,
+                    'drop_path': dpr[i],
+                    'norm_layer': norm_layer,
+                    'act_layer': act_layer,
+                    'scope_controller': self.adapter_controller,
+                    'scope_specs': scope_specs,
+                    'shared_shards': self.endo_unid_cfg.get('shared_shards', 1),
+                    'dropout': self.endo_unid_cfg.get('dropout', 0.0),
+                    'init_values': init_values,
+                }
+                blocks_list.append(EndoUniDBlock(**block_kwargs))
+                continue
+
             if self.use_moe:
                 # 对于MoE模式，需要传递专家参数
                 block_kwargs = {
@@ -324,8 +360,20 @@ class DinoVisionTransformer_LoRA(nn.Module):
         self.init_weights()
 
         # Apply LoRA parameter freezing logic
-        if lora_r > 0:
+        if lora_r > 0 or self.is_endo_unid:
             mark_only_lora_as_trainable(self, bias=lora_bias)
+
+    def _build_endo_scope_specs(self, scopes: Sequence[str]) -> Dict[str, Dict[str, int]]:
+        cfg = self.endo_unid_cfg or {}
+        rank_table = cfg.get('ranks', {})
+        alpha_table = cfg.get('alphas', {})
+        specs = {}
+        for scope in scopes:
+            specs[scope] = {
+                'r': rank_table.get(scope, 0),
+                'alpha': alpha_table.get(scope, 1),
+            }
+        return specs
 
     def init_weights(self):
         trunc_normal_(self.pos_embed, std=0.02)
@@ -491,6 +539,18 @@ class DinoVisionTransformer_LoRA(nn.Module):
 
     def lora_state_dict(self, bias: str = 'none'):
         return lora_state_dict(self, bias=bias)
+
+    def set_active_adapter_scopes(self, scopes):
+        if hasattr(self, "adapter_controller"):
+            self.adapter_controller.set_active(scopes)
+
+    def adapter_scope(self, scopes):
+        if not hasattr(self, "adapter_controller"):
+            @contextmanager
+            def _noop_scope():
+                yield
+            return _noop_scope()
+        return self.adapter_controller.activate(scopes)
     # ----------------------------- #
 
 

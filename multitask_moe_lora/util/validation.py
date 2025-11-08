@@ -16,6 +16,7 @@ from torch.nn import CrossEntropyLoss
 import logging
 from typing import Dict, Any, Optional, List
 import math
+import statistics
 from collections import Counter
 import torch.distributed as dist
 
@@ -704,9 +705,9 @@ def validate_and_visualize(model: torch.nn.Module,
     if task_type == 'depth':
         # [0]: valid_pixels, [1]: thresh1.25, [2]: thresh1.25^2, [3]: thresh1.25^3,
         # [4]: abs_rel_sum, [5]: sq_rel_sum, [6]: diff_sq_sum, [7]: diff_log_sq_sum,
-        # [8]: log10_sum, [9]: diff_log_sum
+        # [8]: log10_sum, [9]: diff_log_sum, [10]: abs_diff_sum (m), [11]: within_2cm_count
         def _create_depth_stats() -> torch.Tensor:
-            return torch.zeros(10, device='cuda')
+            return torch.zeros(12, device='cuda')
 
         depth_stats = {
             "NO": _create_depth_stats(),
@@ -715,37 +716,244 @@ def validate_and_visualize(model: torch.nn.Module,
         }
         dataset_depth_stats: Dict[str, torch.Tensor] = {}
 
-        def _create_camera_metrics_bucket() -> Dict[str, float]:
-            return {
-                "fx_abs": 0.0,
-                "fy_abs": 0.0,
-                "fx_pct": 0.0,
-                "fy_pct": 0.0,
-                "principal_dist": 0.0,
-                "count": 0.0,
-            }
+        CAMERA_NUMERIC_KEYS = [
+            "fx_abs",
+            "fy_abs",
+            "fx_pct",
+            "fy_pct",
+            "fx_sq",
+            "fy_sq",
+            "cx_abs",
+            "cy_abs",
+            "cx_pct",
+            "cy_pct",
+            "cx_sq",
+            "cy_sq",
+            "principal_dist",
+            "principal_sq",
+            "principal_pct",
+            "principal_pct_sq",
+            "reproj_sum",
+        ]
+        CAMERA_SAMPLE_KEYS = [
+            "f_pair_samples",
+            "c_pair_samples",
+            "principal_samples",
+            "principal_pct_samples",
+            "reproj_samples",
+        ]
+        _REPROJ_SAMPLES = 16
 
-        def _update_camera_metrics(bucket: Dict[str, float], fx_abs: float, fy_abs: float,
-                                   fx_pct: float, fy_pct: float, principal_err: float) -> None:
-            bucket["fx_abs"] += fx_abs
-            bucket["fy_abs"] += fy_abs
-            bucket["fx_pct"] += fx_pct
-            bucket["fy_pct"] += fy_pct
-            bucket["principal_dist"] += principal_err
+        _reproj_grid_cache: Dict[Tuple[int, int, int], Tuple[np.ndarray, np.ndarray]] = {}
+
+        def _create_camera_metrics_bucket() -> Dict[str, Any]:
+            bucket: Dict[str, Any] = {key: 0.0 for key in CAMERA_NUMERIC_KEYS}
+            bucket["count"] = 0.0
+            for key in CAMERA_SAMPLE_KEYS:
+                bucket[key] = []
+            return bucket
+
+        def _accumulate_camera_bucket(dest: Dict[str, Any], src: Dict[str, Any]) -> None:
+            for key in CAMERA_NUMERIC_KEYS:
+                dest[key] += float(src.get(key, 0.0))
+            dest["count"] += float(src.get("count", 0.0))
+            for key in CAMERA_SAMPLE_KEYS:
+                dest[key].extend(src.get(key, []))
+
+        def _update_camera_metrics(bucket: Dict[str, Any], sample: Dict[str, float]) -> None:
+            bucket["fx_abs"] += sample["fx_abs"]
+            bucket["fy_abs"] += sample["fy_abs"]
+            bucket["fx_pct"] += sample["fx_pct"]
+            bucket["fy_pct"] += sample["fy_pct"]
+            bucket["fx_sq"] += sample["fx_abs"] ** 2
+            bucket["fy_sq"] += sample["fy_abs"] ** 2
+            bucket["cx_abs"] += sample["cx_abs"]
+            bucket["cy_abs"] += sample["cy_abs"]
+            bucket["cx_pct"] += sample["cx_pct"]
+            bucket["cy_pct"] += sample["cy_pct"]
+            bucket["cx_sq"] += sample["cx_abs"] ** 2
+            bucket["cy_sq"] += sample["cy_abs"] ** 2
+            bucket["principal_dist"] += sample["principal_dist"]
+            bucket["principal_sq"] += sample["principal_dist"] ** 2
+            bucket["principal_pct"] += sample["principal_pct"]
+            bucket["principal_pct_sq"] += sample["principal_pct"] ** 2
+            reproj_val = sample.get("reproj_err")
+            if reproj_val is not None:
+                bucket["reproj_sum"] += reproj_val
+                bucket["reproj_samples"].append(reproj_val)
             bucket["count"] += 1
+            bucket["f_pair_samples"].append(sample["f_pair"])
+            bucket["c_pair_samples"].append(sample["c_pair"])
+            bucket["principal_samples"].append(sample["principal_dist"])
+            bucket["principal_pct_samples"].append(sample["principal_pct"])
 
-        def _finalize_camera_metrics(bucket: Dict[str, float]) -> Dict[str, float]:
-            count = max(bucket.get("count", 0.0), 1.0)
+        def _compute_camera_sample_metrics(
+            fx_gt: float,
+            fy_gt: float,
+            cx_gt: float,
+            cy_gt: float,
+            fx_pred: float,
+            fy_pred: float,
+            cx_pred: float,
+            cy_pred: float,
+            width: int,
+            height: int,
+        ) -> Dict[str, float]:
+            fx_abs = abs(fx_pred - fx_gt)
+            fy_abs = abs(fy_pred - fy_gt)
+            cx_abs = abs(cx_pred - cx_gt)
+            cy_abs = abs(cy_pred - cy_gt)
+            fx_pct = fx_abs / max(abs(fx_gt), 1e-6)
+            fy_pct = fy_abs / max(abs(fy_gt), 1e-6)
+            cx_pct = cx_abs / max(float(width), 1e-6)
+            cy_pct = cy_abs / max(float(height), 1e-6)
+            principal_dist = math.hypot(cx_abs, cy_abs)
+            principal_pct = math.hypot(cx_pct, cy_pct)
+            f_pair = math.sqrt(0.5 * (fx_abs ** 2 + fy_abs ** 2))
+            c_pair = math.sqrt(0.5 * (cx_abs ** 2 + cy_abs ** 2))
+            reproj_err = _compute_reprojection_error(
+                fx_gt=fx_gt,
+                fy_gt=fy_gt,
+                cx_gt=cx_gt,
+                cy_gt=cy_gt,
+                fx_pred=fx_pred,
+                fy_pred=fy_pred,
+                cx_pred=cx_pred,
+                cy_pred=cy_pred,
+                width=width,
+                height=height,
+            )
             return {
-                "fx_abs": bucket["fx_abs"] / count,
-                "fy_abs": bucket["fy_abs"] / count,
-                "fx_pct": bucket["fx_pct"] / count,
-                "fy_pct": bucket["fy_pct"] / count,
-                "principal_dist": bucket["principal_dist"] / count,
+                "fx_abs": fx_abs,
+                "fy_abs": fy_abs,
+                "fx_pct": fx_pct,
+                "fy_pct": fy_pct,
+                "cx_abs": cx_abs,
+                "cy_abs": cy_abs,
+                "cx_pct": cx_pct,
+                "cy_pct": cy_pct,
+                "principal_dist": principal_dist,
+                "principal_pct": principal_pct,
+                "f_pair": f_pair,
+                "c_pair": c_pair,
+                "reproj_err": reproj_err,
             }
+
+        _TB_SAMPLES_PER_DATASET = 4
+
+        def _collect_depth_samples(store: Dict[str, List[Dict[str, torch.Tensor]]],
+                                   batch: Dict[str, Any],
+                                   pred: torch.Tensor,
+                                   valid_mask: torch.Tensor,
+                                   dataset_name: Optional[str],
+                                   sample_idx: int,
+                                   batch_idx: int,
+                                   config: TrainingConfig) -> None:
+            """
+            Cache a few representative samples per dataset for potential downstream visualization.
+            """
+            safe_name = _sanitize_name(dataset_name) or "unknown"
+            samples = store.setdefault(safe_name, [])
+            if len(samples) >= _TB_SAMPLES_PER_DATASET:
+                return
+
+            sample = {
+                "image": batch["image"][sample_idx].detach().cpu(),
+                "pred": pred[sample_idx].detach().cpu(),
+                "mask": valid_mask[sample_idx].detach().cpu(),
+                "meta": {
+                    "dataset": dataset_name or "unknown",
+                    "batch_idx": batch_idx,
+                    "epoch": epoch,
+                    "img_size": config.img_size,
+                },
+            }
+            samples.append(sample)
+
+        def _finalize_camera_metrics(bucket: Dict[str, Any]) -> Dict[str, float]:
+            count = max(bucket.get("count", 0.0), 1.0)
+            fx_abs_mean = bucket["fx_abs"] / count
+            fy_abs_mean = bucket["fy_abs"] / count
+            cx_abs_mean = bucket["cx_abs"] / count
+            cy_abs_mean = bucket["cy_abs"] / count
+            cx_pct_mean = bucket["cx_pct"] / count
+            cy_pct_mean = bucket["cy_pct"] / count
+            fx_pct_mean = bucket["fx_pct"] / count
+            fy_pct_mean = bucket["fy_pct"] / count
+            principal_mean = bucket["principal_dist"] / count
+            principal_pct_mean = bucket["principal_pct"] / count
+            reproj_sum = bucket.get("reproj_sum", 0.0)
+            reproj_mean = (reproj_sum / count) if reproj_sum > 0 else None
+
+            fx_rmse = math.sqrt(max(bucket["fx_sq"] + bucket["fy_sq"], 0.0) / max(2.0 * count, 1e-6))
+            cx_rmse = math.sqrt(max(bucket["cx_sq"] + bucket["cy_sq"], 0.0) / max(2.0 * count, 1e-6))
+            principal_rmse = math.sqrt(max(bucket["principal_sq"], 0.0) / max(count, 1e-6))
+            principal_pct_rmse = math.sqrt(max(bucket["principal_pct_sq"], 0.0) / max(count, 1e-6))
+
+            def _median(samples: List[float]) -> Optional[float]:
+                if not samples:
+                    return None
+                return float(statistics.median(samples))
+
+            metrics = {
+                "fx_abs": fx_abs_mean,
+                "fy_abs": fy_abs_mean,
+                "fx_pct": fx_pct_mean,
+                "fy_pct": fy_pct_mean,
+                "fx_rmse": fx_rmse,
+                "cx_abs": cx_abs_mean,
+                "cy_abs": cy_abs_mean,
+                "cx_pct": cx_pct_mean,
+                "cy_pct": cy_pct_mean,
+                "c_rmse": cx_rmse,
+                "principal_dist": principal_mean,
+                "principal_rmse": principal_rmse,
+                "principal_pct": principal_pct_mean,
+                "principal_pct_rmse": principal_pct_rmse,
+                "reproj_mean": reproj_mean,
+                "median_f_abs": _median(bucket["f_pair_samples"]),
+                "median_c_abs": _median(bucket["c_pair_samples"]),
+                "principal_median": _median(bucket["principal_samples"]),
+                "principal_pct_median": _median(bucket["principal_pct_samples"]),
+                "reproj_median": _median(bucket["reproj_samples"]),
+            }
+            return metrics
+
+        def _compute_reprojection_error(
+            fx_gt: float,
+            fy_gt: float,
+            cx_gt: float,
+            cy_gt: float,
+            fx_pred: float,
+            fy_pred: float,
+            cx_pred: float,
+            cy_pred: float,
+            width: int,
+            height: int,
+            grid: int = _REPROJ_SAMPLES,
+        ) -> float:
+            if width <= 1 or height <= 1:
+                return 0.0
+            steps_x = min(grid, width)
+            steps_y = min(grid, height)
+            cache_key = (steps_x, steps_y, width, height)
+            grid_x, grid_y = _reproj_grid_cache.get(cache_key, (None, None))
+            if grid_x is None or grid_y is None:
+                xs = np.linspace(0.0, max(width - 1, 1), num=steps_x, dtype=np.float64)
+                ys = np.linspace(0.0, max(height - 1, 1), num=steps_y, dtype=np.float64)
+                grid_x, grid_y = np.meshgrid(xs, ys, indexing="xy")
+                _reproj_grid_cache[cache_key] = (grid_x, grid_y)
+            fx_gt_safe = max(abs(fx_gt), 1e-6)
+            fy_gt_safe = max(abs(fy_gt), 1e-6)
+            dir_x = (grid_x - cx_gt) / fx_gt_safe
+            dir_y = (grid_y - cy_gt) / fy_gt_safe
+            u_pred = fx_pred * dir_x + cx_pred
+            v_pred = fy_pred * dir_y + cy_pred
+            err = np.sqrt((u_pred - grid_x) ** 2 + (v_pred - grid_y) ** 2)
+            return float(err.mean())
 
         camera_metrics_total = _create_camera_metrics_bucket()
-        camera_metrics_by_dataset: Dict[str, Dict[str, float]] = {}
+        camera_metrics_by_dataset: Dict[str, Dict[str, Any]] = {}
 
         def _update_depth_stats(stats_tensor: torch.Tensor,
                                 pred_valid: torch.Tensor,
@@ -759,18 +967,21 @@ def validate_and_visualize(model: torch.nn.Module,
             thresh = torch.maximum(gt_clamped / pred_clamped, pred_clamped / gt_clamped)
             diff = pred_clamped - gt_clamped
             diff_sq = diff.square()
+            abs_diff = torch.abs(diff)
             diff_log = torch.log(pred_clamped) - torch.log(gt_clamped)
 
             stats_tensor[0] += pred_clamped.numel()
             stats_tensor[1] += (thresh < 1.25).sum()
             stats_tensor[2] += (thresh < 1.25 ** 2).sum()
             stats_tensor[3] += (thresh < 1.25 ** 3).sum()
-            stats_tensor[4] += torch.sum(torch.abs(diff) / gt_clamped)
+            stats_tensor[4] += torch.sum(abs_diff / gt_clamped)
             stats_tensor[5] += torch.sum(diff_sq / gt_clamped)
             stats_tensor[6] += torch.sum(diff_sq)
             stats_tensor[7] += torch.sum(diff_log.square())
             stats_tensor[8] += torch.sum(torch.abs(torch.log10(pred_clamped) - torch.log10(gt_clamped)))
             stats_tensor[9] += torch.sum(diff_log)
+            stats_tensor[10] += torch.sum(abs_diff)
+            stats_tensor[11] += (abs_diff <= 0.02).sum()
 
     elif task_type == 'seg':
         seg_metrics = {
@@ -779,183 +990,215 @@ def validate_and_visualize(model: torch.nn.Module,
             "combined": SegMetric(config.num_classes)
         }
 
-    with torch.no_grad():
-        for i, batch in enumerate(val_loader):
-            input_img = batch["image"].cuda()
-            outputs, loss = None, torch.tensor(0.0)
+    def _process_validation_batch(batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
+        input_img = batch["image"].cuda()
+        outputs: Optional[Dict[str, torch.Tensor]] = None
+        loss = torch.tensor(0.0, device=input_img.device)
 
-            if task_type == 'depth':
-                _log_dataset_progress(logger, "Val", task_display, epoch, batch.get("dataset_name"), tracker, rank)
-                target_gt = batch["depth"].cuda()
-                outputs = model(input_img, task='depth')
-                pred = outputs['depth']
-                valid_mask_4d = (target_gt > 0) & (target_gt >= config.min_depth) & (target_gt <= config.max_depth)
-                loss = temp_validator.criterion(pred, target_gt, valid_mask_4d)
+        if task_type == 'depth':
+            _log_dataset_progress(logger, "Val", task_display, epoch, batch.get("dataset_name"), tracker, rank)
+            target_gt = batch["depth"].cuda()
+            outputs = model(input_img, task='depth')
+            pred = outputs['depth']
+            valid_mask_4d = (target_gt > 0) & (target_gt >= config.min_depth) & (target_gt <= config.max_depth)
+            loss = temp_validator.criterion(pred, target_gt, valid_mask_4d)
 
-                # 保存第一个batch的预测结果（仅rank 0）
-                if i == 0 and rank == 0:
-                    temp_validator.save_prediction(pred, epoch)
+            if batch_idx == 0 and rank == 0:
+                temp_validator.save_prediction(pred, epoch)
 
-                # 收集用于指标计算的数据
-                source_types = batch.get("source_type", None)
-                dataset_names = batch.get("dataset_name", None)
-                for j in range(pred.shape[0]):
-                    valid_mask = valid_mask_4d[j].squeeze(0)
-                    if valid_mask.numel() == 0 or valid_mask.sum().item() == 0:
-                        continue  # 跳过没有有效像素的样本，避免后续指标计算出现空数组
-                    pred_slice = pred[j].squeeze(0)
-                    gt_slice = target_gt[j].squeeze(0)
+            source_types = batch.get("source_type", None)
+            dataset_names = batch.get("dataset_name", None)
+            for j in range(pred.shape[0]):
+                valid_mask = valid_mask_4d[j].squeeze(0)
+                if valid_mask.numel() == 0 or valid_mask.sum().item() == 0:
+                    continue
+                pred_slice = pred[j].squeeze(0)
+                gt_slice = target_gt[j].squeeze(0)
 
-                    pred_valid = pred_slice[valid_mask]
-                    gt_valid = gt_slice[valid_mask]
+                if pred_slice.shape != valid_mask.shape:
+                    logger.error(
+                        "[Validation] Shape mismatch before masking (task=%s, dataset=%s, sample=%d, pred=%s, mask=%s)",
+                        task_type,
+                        dataset_names[j] if dataset_names and j < len(dataset_names) else None,
+                        j,
+                        tuple(pred_slice.shape),
+                        tuple(valid_mask.shape),
+                    )
+                    raise RuntimeError(
+                        f"Pred/mask shape mismatch: pred={tuple(pred_slice.shape)} mask={tuple(valid_mask.shape)}"
+                    )
 
+                pred_valid = pred_slice[valid_mask]
+                gt_valid = gt_slice[valid_mask]
+
+                dataset_raw = None
+                if dataset_names and j < len(dataset_names):
+                    dataset_raw = dataset_names[j]
+                dataset_name = str(dataset_raw) if dataset_raw else None
+                if dataset_name:
+                    stats_tensor_ds = dataset_depth_stats.setdefault(dataset_name, _create_depth_stats())
+                    _update_depth_stats(stats_tensor_ds, pred_valid, gt_valid)
+
+                raw_type = (source_types[j] if source_types and j < len(source_types) else "combined")
+                mapped = alias_map.get(str(raw_type).lower(), None)
+                source_type = mapped if mapped is not None else ("combined" if raw_type not in depth_stats else raw_type)
+
+                if source_type not in depth_stats:
+                    logger.warning(f"Unknown source_type '{raw_type}' encountered during depth validation. Falling back to 'combined'.")
+                    source_type = "combined"
+
+                _update_depth_stats(depth_stats[source_type], pred_valid, gt_valid)
+                if source_type != "combined":
+                    _update_depth_stats(depth_stats["combined"], pred_valid, gt_valid)
+
+                camera_batch = batch.get('camera_intrinsics')
+                camera_mask = batch.get('camera_intrinsics_mask')
+                if camera_mask is not None and not torch.is_tensor(camera_mask):
+                    camera_mask = torch.as_tensor(camera_mask, dtype=torch.bool)
+                pred_camera_batch = outputs.get('camera_intrinsics') if outputs else None
+                if (
+                    camera_batch is not None
+                    and pred_camera_batch is not None
+                    and j < len(camera_batch)
+                    and j < pred_camera_batch.size(0)
+                ):
+                    if camera_mask is not None:
+                        if camera_mask.dim() > 1:
+                            mask_row = camera_mask[j].reshape(-1)[0]
+                        else:
+                            mask_row = camera_mask[j]
+                        if not bool(mask_row):
+                            continue
+                    image_tensor = batch.get("image")
+                    if image_tensor is None:
+                        continue
+                    height_px = int(image_tensor.shape[-2])
+                    width_px = int(image_tensor.shape[-1])
+                    pred_camera = pred_camera_batch[j].detach().cpu()
+                    gt_camera_entry = camera_batch[j]
+                    if torch.is_tensor(gt_camera_entry):
+                        gt_camera = gt_camera_entry.cpu()
+                    else:
+                        gt_camera = torch.as_tensor(gt_camera_entry, dtype=torch.float32)
+
+                    fx_pred = float(pred_camera[0, 0])
+                    fy_pred = float(pred_camera[1, 1])
+                    cx_pred = float(pred_camera[0, 2])
+                    cy_pred = float(pred_camera[1, 2])
+
+                    fx_gt = float(gt_camera[0, 0])
+                    fy_gt = float(gt_camera[1, 1])
+                    cx_gt = float(gt_camera[0, 2])
+                    cy_gt = float(gt_camera[1, 2])
+
+                    row_key = dataset_name or "unknown"
+                    bucket = camera_metrics_by_dataset.setdefault(row_key, _create_camera_metrics_bucket())
+
+                    camera_sample = _compute_camera_sample_metrics(
+                        fx_gt=fx_gt,
+                        fy_gt=fy_gt,
+                        cx_gt=cx_gt,
+                        cy_gt=cy_gt,
+                        fx_pred=fx_pred,
+                        fy_pred=fy_pred,
+                        cx_pred=cx_pred,
+                        cy_pred=cy_pred,
+                        width=width_px,
+                        height=height_px,
+                    )
+
+                    _update_camera_metrics(bucket, camera_sample)
+                    _update_camera_metrics(camera_metrics_total, camera_sample)
+                    bucket["count"] += 1
+                    camera_metrics_total["count"] += 1
+
+                if tb_depth_samples is not None and rank == 0:
+                    _collect_depth_samples(tb_depth_samples, batch, pred, valid_mask_4d, dataset_name, j, batch_idx, config)
+
+        elif task_type == 'seg':
+            _log_dataset_progress(logger, "Val", task_display, epoch, batch.get("dataset_name"), tracker, rank)
+            target_gt = batch["semseg_mask"].cuda().long()
+            outputs = model(input_img, task='seg')
+            pred = outputs['seg']
+            dataset_names = batch.get("dataset_name", None)
+
+            ignore_idx = 255
+            valid_class_mask = (target_gt >= 0) & (target_gt < config.num_classes)
+            ignore_mask = (target_gt == ignore_idx)
+            valid_mask = valid_class_mask | ignore_mask
+            sanitized_target = torch.where(valid_mask, target_gt, torch.full_like(target_gt, ignore_idx))
+
+            loss = temp_validator.criterion(pred, sanitized_target)
+
+            if batch_idx == 0 and rank == 0:
+                temp_validator.save_prediction(pred, epoch)
+
+            pred_labels = pred.argmax(dim=1)
+            for j in range(pred.shape[0]):
+                source_list = batch.get("source_type", [])
+                raw_type = source_list[j] if j < len(source_list) else "combined"
+                mapped = alias_map.get(str(raw_type).lower(), None)
+                source_type = mapped if mapped is not None else ("combined" if raw_type not in seg_metrics else raw_type)
+
+                if source_type not in seg_metrics:
+                    logger.warning(f"Unknown source_type '{raw_type}' encountered during seg validation. Falling back to 'combined'.")
+                    source_type = "combined"
+
+                per_sample_loss = loss.item() / max(pred.shape[0], 1)
+                seg_metrics[source_type].update(sanitized_target[j].unsqueeze(0), pred_labels[j].unsqueeze(0), batch_loss=per_sample_loss)
+                if source_type != "combined":
+                    seg_metrics["combined"].update(sanitized_target[j].unsqueeze(0), pred_labels[j].unsqueeze(0), batch_loss=per_sample_loss)
+
+                if tb_seg_samples is not None:
+                    display_name = _sanitize_name(raw_type)
+                    if display_name.lower() == "combined":
+                        display_name = _sanitize_name(source_type)
+                    if display_name and display_name not in tb_seg_samples:
+                        tb_seg_samples[display_name] = {
+                            "image": batch["image"][j].detach().cpu(),
+                            "pred": pred_labels[j].detach().cpu(),
+                            "gt": sanitized_target[j].detach().cpu(),
+                        }
+
+                if seg_visual_samples is not None:
                     dataset_raw = None
                     if dataset_names and j < len(dataset_names):
                         dataset_raw = dataset_names[j]
-                    dataset_name = str(dataset_raw) if dataset_raw else None
-                    if dataset_name:
-                        stats_tensor_ds = dataset_depth_stats.setdefault(dataset_name, _create_depth_stats())
-                        _update_depth_stats(stats_tensor_ds, pred_valid, gt_valid)
+                    if dataset_raw is None:
+                        dataset_raw = raw_type
+                    dataset_label = str(dataset_raw)
+                    dataset_key = _sanitize_name(dataset_label) or "unknown"
+                    entry = seg_visual_samples.setdefault(dataset_key, {"label": dataset_label, "samples": []})
+                    if len(entry["samples"]) < 3:
+                        entry["samples"].append({
+                            "image": batch["image"][j].detach().cpu(),
+                            "pred": pred_labels[j].detach().cpu(),
+                            "gt": sanitized_target[j].detach().cpu(),
+                        })
 
-                    raw_type = (source_types[j] if source_types and j < len(source_types) else "combined")
-                    mapped = alias_map.get(str(raw_type).lower(), None)
-                    source_type = mapped if mapped is not None else ("combined" if raw_type not in depth_stats else raw_type)
+        return loss
 
-                    if source_type not in depth_stats:
-                        logger.warning(f"Unknown source_type '{raw_type}' encountered during depth validation. Falling back to 'combined'.")
-                        source_type = "combined"
-
-                    _update_depth_stats(depth_stats[source_type], pred_valid, gt_valid)
-                    if source_type != "combined":
-                        _update_depth_stats(depth_stats["combined"], pred_valid, gt_valid)
-
-                    # --- Camera metrics ---
-                    camera_batch = batch.get('camera_intrinsics')
-                    pred_camera_batch = outputs.get('camera_intrinsics')
-                    if (
-                        camera_batch is not None
-                        and pred_camera_batch is not None
-                        and j < len(camera_batch)
-                        and j < pred_camera_batch.size(0)
-                    ):
-                        pred_camera = pred_camera_batch[j].detach().cpu()
-                        gt_camera_entry = camera_batch[j]
-                        if torch.is_tensor(gt_camera_entry):
-                            gt_camera = gt_camera_entry.cpu()
-                        else:
-                            gt_camera = torch.as_tensor(gt_camera_entry, dtype=torch.float32)
-
-                        fx_pred = float(pred_camera[0, 0])
-                        fy_pred = float(pred_camera[1, 1])
-                        cx_pred = float(pred_camera[0, 2])
-                        cy_pred = float(pred_camera[1, 2])
-
-                        fx_gt = float(gt_camera[0, 0])
-                        fy_gt = float(gt_camera[1, 1])
-                        cx_gt = float(gt_camera[0, 2])
-                        cy_gt = float(gt_camera[1, 2])
-
-                        fx_abs = abs(fx_pred - fx_gt)
-                        fy_abs = abs(fy_pred - fy_gt)
-                        fx_pct = fx_abs / max(abs(fx_gt), 1e-6)
-                        fy_pct = fy_abs / max(abs(fy_gt), 1e-6)
-                        principal_err = math.hypot(cx_pred - cx_gt, cy_pred - cy_gt)
-
-                        _update_camera_metrics(camera_metrics_total, fx_abs, fy_abs, fx_pct, fy_pct, principal_err)
-                        dataset_label = dataset_name or str(dataset_raw or raw_type)
-                        bucket = camera_metrics_by_dataset.setdefault(dataset_label, _create_camera_metrics_bucket())
-                        _update_camera_metrics(bucket, fx_abs, fy_abs, fx_pct, fy_pct, principal_err)
-
-                    if tb_depth_samples is not None:
-                        display_name = _sanitize_name(raw_type)
-                        if display_name.lower() == "combined":
-                            display_name = _sanitize_name(source_type)
-                        if display_name and display_name not in tb_depth_samples:
-                            tb_depth_samples[display_name] = {
-                                "image": batch["image"][j].detach().cpu(),
-                                "pred": pred[j].detach().cpu(),
-                                "gt": target_gt[j].detach().cpu(),
-                                "valid_mask": valid_mask_4d[j].detach().cpu(),
-                            }
-
-                    if depth_visual_samples is not None:
-                        dataset_label = str(dataset_raw) if dataset_raw else str(raw_type)
-                        dataset_key = _sanitize_name(dataset_label) or "unknown"
-                        entry = depth_visual_samples.setdefault(dataset_key, {"label": dataset_label, "samples": []})
-                        if len(entry["samples"]) < 1:
-                            entry["samples"].append({
-                                "image": batch["image"][j].detach().cpu(),
-                                "pred": pred[j].detach().cpu(),
-                                "gt": target_gt[j].detach().cpu(),
-                                "valid_mask": valid_mask_4d[j].detach().cpu(),
-                            })
-
-            elif task_type == 'seg':
-                _log_dataset_progress(logger, "Val", task_display, epoch, batch.get("dataset_name"), tracker, rank)
-                target_gt = batch["semseg_mask"].cuda()
-                outputs = model(input_img, task='seg')
-                pred = outputs['seg']
-                dataset_names = batch.get("dataset_name", None)
-
-                ignore_idx = 255
-                valid_class_mask = (target_gt >= 0) & (target_gt < config.num_classes)
-                ignore_mask = (target_gt == ignore_idx)
-                valid_mask = valid_class_mask | ignore_mask
-                sanitized_target = torch.where(valid_mask, target_gt, torch.full_like(target_gt, ignore_idx))
-
-                loss = temp_validator.criterion(pred, sanitized_target)
-
-                # 保存第一个batch的预测结果（仅rank 0）
-                if i == 0 and rank == 0:
-                    temp_validator.save_prediction(pred, epoch)
-
-                # 收集用于指标计算的数据
-                pred_labels = pred.argmax(dim=1)
-                for j in range(pred.shape[0]):
-                    source_list = batch.get("source_type", [])
-                    raw_type = source_list[j] if j < len(source_list) else "combined"
-                    mapped = alias_map.get(str(raw_type).lower(), None)
-                    source_type = mapped if mapped is not None else ("combined" if raw_type not in seg_metrics else raw_type)
-
-                    if source_type not in seg_metrics:
-                        logger.warning(f"Unknown source_type '{raw_type}' encountered during seg validation. Falling back to 'combined'.")
-                        source_type = "combined"
-
-                    # SegMetric.update 内部会过滤无效像素
-                    per_sample_loss = loss.item() / max(pred.shape[0], 1)
-                    seg_metrics[source_type].update(sanitized_target[j].unsqueeze(0), pred_labels[j].unsqueeze(0), batch_loss=per_sample_loss)
-                    if source_type != "combined":
-                        seg_metrics["combined"].update(sanitized_target[j].unsqueeze(0), pred_labels[j].unsqueeze(0), batch_loss=per_sample_loss)
-
-                    if tb_seg_samples is not None:
-                        display_name = _sanitize_name(raw_type)
-                        if display_name.lower() == "combined":
-                            display_name = _sanitize_name(source_type)
-                        if display_name and display_name not in tb_seg_samples:
-                            tb_seg_samples[display_name] = {
-                                "image": batch["image"][j].detach().cpu(),
-                                "pred": pred_labels[j].detach().cpu(),
-                                "gt": sanitized_target[j].detach().cpu(),
-                            }
-
-                    if seg_visual_samples is not None:
-                        dataset_raw = None
-                        if dataset_names and j < len(dataset_names):
-                            dataset_raw = dataset_names[j]
-                        if dataset_raw is None:
-                            dataset_raw = raw_type
-                        dataset_label = str(dataset_raw)
-                        dataset_key = _sanitize_name(dataset_label) or "unknown"
-                        entry = seg_visual_samples.setdefault(dataset_key, {"label": dataset_label, "samples": []})
-                        if len(entry["samples"]) < 3:
-                            entry["samples"].append({
-                                "image": batch["image"][j].detach().cpu(),
-                                "pred": pred_labels[j].detach().cpu(),
-                                "gt": sanitized_target[j].detach().cpu(),
-                            })
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            try:
+                loss = _process_validation_batch(batch, i)
+            except Exception as exc:
+                if config.tolerate_validation_errors:
+                    dataset_info = batch.get("dataset_name") if isinstance(batch, dict) else None
+                    logger.error(
+                        "Validation batch failed (task=%s, dataset=%s, batch_idx=%d): %s",
+                        task_type,
+                        dataset_info,
+                        i,
+                        exc,
+                    )
+                    logger.debug("Validation exception details", exc_info=exc)
+                    continue
+                raise
 
             total_loss_local += loss.item()
             batch_count_local += 1
+
 
     # 同步所有进程
     if dist.is_initialized() and world_size > 1:
@@ -965,6 +1208,25 @@ def validate_and_visualize(model: torch.nn.Module,
     if task_type == 'depth' and dist.is_initialized() and world_size > 1:
         for stats_tensor in depth_stats.values():
             dist.all_reduce(stats_tensor, op=dist.ReduceOp.SUM)
+
+        gathered_totals: List[Optional[Dict[str, Any]]] = [None for _ in range(world_size)]
+        dist.all_gather_object(gathered_totals, camera_metrics_total)
+        merged_total = _create_camera_metrics_bucket()
+        for entry in gathered_totals:
+            if entry:
+                _accumulate_camera_bucket(merged_total, entry)
+        camera_metrics_total = merged_total
+
+        gathered_camera_buckets: List[Optional[Dict[str, Dict[str, Any]]]] = [None for _ in range(world_size)]
+        dist.all_gather_object(gathered_camera_buckets, camera_metrics_by_dataset)
+        merged_camera_metrics: Dict[str, Dict[str, Any]] = {}
+        for entry in gathered_camera_buckets:
+            if not entry:
+                continue
+            for dataset_key, bucket in entry.items():
+                accumulator = merged_camera_metrics.setdefault(dataset_key, _create_camera_metrics_bucket())
+                _accumulate_camera_bucket(accumulator, bucket)
+        camera_metrics_by_dataset = merged_camera_metrics
     elif task_type == 'seg' and dist.is_initialized() and world_size > 1:
         for metric_calc in seg_metrics.values():
             dist.all_reduce(metric_calc.confusion_matrix, op=dist.ReduceOp.SUM)
@@ -1024,6 +1286,8 @@ def validate_and_visualize(model: torch.nn.Module,
                 rmse_log = float(np.sqrt(stats_cpu[7].item() / valid_pixels))
                 log10_val = stats_cpu[8].item() / valid_pixels
                 mean_diff_log = stats_cpu[9].item() / valid_pixels
+                mae_cm = (stats_cpu[10].item() / valid_pixels) * 100.0
+                acc_2cm = stats_cpu[11].item() / valid_pixels
                 silog_inner = stats_cpu[7].item() / valid_pixels - 0.5 * (mean_diff_log ** 2)
                 silog_inner = max(silog_inner, 0.0)
                 silog = float(np.sqrt(silog_inner))
@@ -1037,12 +1301,18 @@ def validate_and_visualize(model: torch.nn.Module,
                     'rmse': rmse,
                     'rmse_log': rmse_log,
                     'log10': log10_val,
-                    'silog': silog
+                    'silog': silog,
+                    'mae_cm': mae_cm,
+                    'acc_2cm': acc_2cm,
                 }
                 domain_metrics[name] = metrics
                 all_metrics[name] = metrics
                 display_name = name.upper() if name != 'combined' else name.capitalize()
-                logger.info(f"[{display_name}] Depth Validation Epoch {epoch} - absrel: {metrics.get('absrel', 0):.4f}, rmse: {metrics.get('rmse', 0):.4f}")
+                logger.info(
+                    f"[{display_name}] Depth Validation Epoch {epoch} - absrel: {metrics.get('absrel', 0):.4f}, "
+                    f"rmse: {metrics.get('rmse', 0):.4f}, mae_cm: {metrics.get('mae_cm', 0):.3f}, "
+                    f"acc@2cm: {metrics.get('acc_2cm', 0):.4f}"
+                )
                 for k, v in metrics.items():
                     if writer is not None:
                         writer.add_scalar(f'Metrics/Depth_{display_name}/{k}', v, epoch)
@@ -1063,6 +1333,8 @@ def validate_and_visualize(model: torch.nn.Module,
                 rmse_log = float(np.sqrt(stats_cpu[7].item() / valid_pixels))
                 log10_val = stats_cpu[8].item() / valid_pixels
                 mean_diff_log = stats_cpu[9].item() / valid_pixels
+                mae_cm = (stats_cpu[10].item() / valid_pixels) * 100.0
+                acc_2cm = stats_cpu[11].item() / valid_pixels
                 silog_inner = stats_cpu[7].item() / valid_pixels - 0.5 * (mean_diff_log ** 2)
                 silog_inner = max(silog_inner, 0.0)
                 silog = float(np.sqrt(silog_inner))
@@ -1076,11 +1348,17 @@ def validate_and_visualize(model: torch.nn.Module,
                     'rmse': rmse,
                     'rmse_log': rmse_log,
                     'log10': log10_val,
-                    'silog': silog
+                    'silog': silog,
+                    'mae_cm': mae_cm,
+                    'acc_2cm': acc_2cm,
                 }
                 dataset_metrics[dataset_name] = metrics
                 safe_name = _sanitize_name(dataset_name)
-                logger.info(f"[Dataset:{dataset_name}] Depth Validation Epoch {epoch} - absrel: {metrics.get('absrel', 0):.4f}, rmse: {metrics.get('rmse', 0):.4f}")
+                logger.info(
+                    f"[Dataset:{dataset_name}] Depth Validation Epoch {epoch} - absrel: {metrics.get('absrel', 0):.4f}, "
+                    f"rmse: {metrics.get('rmse', 0):.4f}, mae_cm: {metrics.get('mae_cm', 0):.3f}, "
+                    f"acc@2cm: {metrics.get('acc_2cm', 0):.4f}"
+                )
                 for k, v in metrics.items():
                     if writer is not None:
                         writer.add_scalar(f'Metrics/Depth_Dataset/{safe_name}/{k}', v, epoch)
@@ -1089,13 +1367,33 @@ def validate_and_visualize(model: torch.nn.Module,
             if camera_metrics_total["count"] > 0:
                 overall_camera = _finalize_camera_metrics(camera_metrics_total)
                 all_metrics['camera_overall'] = overall_camera
+                reproj_mean = overall_camera.get('reproj_mean')
+                reproj_str = f"{reproj_mean:.2f}" if reproj_mean is not None else "N/A"
+                overall_principal_median = overall_camera.get('principal_median')
+                overall_principal_median_str = (
+                    f"{overall_principal_median:.2f}" if overall_principal_median is not None else "N/A"
+                )
+                overall_principal_pct_median = overall_camera.get('principal_pct_median')
+                overall_principal_pct_median_str = (
+                    f"{overall_principal_pct_median:.4f}" if overall_principal_pct_median is not None else "N/A"
+                )
                 logger.info(
                     f"[Camera] Depth Validation Epoch {epoch} - fx_abs: {overall_camera['fx_abs']:.2f}, "
                     f"fy_abs: {overall_camera['fy_abs']:.2f}, fx_pct: {overall_camera['fx_pct']:.4f}, "
-                    f"fy_pct: {overall_camera['fy_pct']:.4f}, principal_px: {overall_camera['principal_dist']:.2f}"
+                    f"fy_pct: {overall_camera['fy_pct']:.4f}, f_rmse_px: {overall_camera['fx_rmse']:.2f}, "
+                    f"cx_abs: {overall_camera['cx_abs']:.2f}, cy_abs: {overall_camera['cy_abs']:.2f}, "
+                    f"cx_pct: {overall_camera['cx_pct']:.4f}, cy_pct: {overall_camera['cy_pct']:.4f}, "
+                    f"principal_px: {overall_camera['principal_dist']:.2f}, principal_pct: {overall_camera['principal_pct']:.4f}, "
+                    f"principal_rmse_px: {overall_camera['principal_rmse']:.2f}, "
+                    f"principal_pct_rmse: {overall_camera['principal_pct_rmse']:.4f}, "
+                    f"principal_median_px: {overall_principal_median_str}, "
+                    f"principal_pct_median: {overall_principal_pct_median_str}, "
+                    f"c_rmse_px: {overall_camera['c_rmse']:.2f}, reproj_px: {reproj_str}"
                 )
                 if writer is not None:
                     for key, value in overall_camera.items():
+                        if value is None:
+                            continue
                         writer.add_scalar(f'Metrics/Camera/overall_{key}', value, epoch)
 
             if camera_metrics_by_dataset:
@@ -1107,19 +1405,47 @@ def validate_and_visualize(model: torch.nn.Module,
                         'camera_fx_pct': metrics_cam['fx_pct'],
                         'camera_fy_pct': metrics_cam['fy_pct'],
                         'camera_principal_dist': metrics_cam['principal_dist'],
+                        'camera_principal_pct': metrics_cam['principal_pct'],
+                        'camera_c_rmse': metrics_cam['c_rmse'],
+                        'camera_f_rmse': metrics_cam['fx_rmse'],
+                        'camera_principal_rmse': metrics_cam['principal_rmse'],
+                        'camera_principal_pct_rmse': metrics_cam['principal_pct_rmse'],
+                        'camera_cx_pct': metrics_cam['cx_pct'],
+                        'camera_cy_pct': metrics_cam['cy_pct'],
+                        'camera_principal_median': metrics_cam.get('principal_median'),
+                        'camera_principal_pct_median': metrics_cam.get('principal_pct_median'),
+                        'camera_reproj': metrics_cam.get('reproj_mean'),
                     })
                     safe_name = _sanitize_name(dataset_name)
+                    reproj_mean = metrics_cam.get('reproj_mean')
+                    reproj_str = f"{reproj_mean:.2f}" if reproj_mean is not None else "N/A"
+                    principal_median = metrics_cam.get('principal_median')
+                    principal_median_str = f"{principal_median:.2f}" if principal_median is not None else "N/A"
+                    principal_pct_median = metrics_cam.get('principal_pct_median')
+                    principal_pct_median_str = (
+                        f"{principal_pct_median:.4f}" if principal_pct_median is not None else "N/A"
+                    )
                     logger.info(
                         f"[Dataset:{dataset_name}] Camera Metrics Epoch {epoch} - fx_abs: {metrics_cam['fx_abs']:.2f}, "
                         f"fy_abs: {metrics_cam['fy_abs']:.2f}, fx_pct: {metrics_cam['fx_pct']:.4f}, "
-                        f"fy_pct: {metrics_cam['fy_pct']:.4f}, principal_px: {metrics_cam['principal_dist']:.2f}"
+                        f"fy_pct: {metrics_cam['fy_pct']:.4f}, f_rmse_px: {metrics_cam['fx_rmse']:.2f}, "
+                        f"cx_abs: {metrics_cam['cx_abs']:.2f}, cy_abs: {metrics_cam['cy_abs']:.2f}, "
+                        f"cx_pct: {metrics_cam['cx_pct']:.4f}, cy_pct: {metrics_cam['cy_pct']:.4f}, "
+                        f"principal_px: {metrics_cam['principal_dist']:.2f}, principal_pct: {metrics_cam['principal_pct']:.4f}, "
+                        f"principal_rmse_px: {metrics_cam['principal_rmse']:.2f}, "
+                        f"principal_pct_rmse: {metrics_cam['principal_pct_rmse']:.4f}, "
+                        f"principal_median_px: {principal_median_str}, "
+                        f"principal_pct_median: {principal_pct_median_str}, "
+                        f"c_rmse_px: {metrics_cam['c_rmse']:.2f}, reproj_px: {reproj_str}"
                     )
                     if writer is not None:
                         for key, value in metrics_cam.items():
+                            if value is None:
+                                continue
                             writer.add_scalar(f'Metrics/Camera_Dataset/{safe_name}/{key}', value, epoch)
 
-            if tb_depth_samples:
-                _log_depth_samples_to_tensorboard(writer, tb_depth_samples, epoch, config.max_depth)
+            if tb_depth_samples and logger is not None:
+                logger.debug("[Validation] 深度样本已生成，按要求跳过 TensorBoard 记录。")
 
             if depth_visual_samples:
                 _export_depth_visuals(depth_visual_samples, config.save_path, epoch + 1, logger)
@@ -1136,8 +1462,8 @@ def validate_and_visualize(model: torch.nn.Module,
                         writer.add_scalar(f'Metrics/Seg_{display_name}/{k}', v, epoch)
                 logger.info(f"    Overall Accuracy: {seg_scores.get('acc_overall', 0):.4f}, Mean IoU: {seg_scores.get('miou', 0):.4f}")
 
-            if tb_seg_samples:
-                _log_seg_samples_to_tensorboard(writer, tb_seg_samples, epoch, config.num_classes)
+            if tb_seg_samples and logger is not None:
+                logger.debug("[Validation] 分割样本已生成，按要求跳过 TensorBoard 记录。")
 
             if seg_visual_samples:
                 _export_seg_visuals(seg_visual_samples, config.save_path, epoch + 1, logger)

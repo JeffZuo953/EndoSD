@@ -51,7 +51,11 @@ def _atomic_torch_save(obj, dst: str) -> None:
 
 
 class LocalCacheManager:
-    """Utility to mirror .pt files or processed samples under a hashed directory tree."""
+    """
+    负责在本地目录下管理缓存文件（.pt），根据 key 生成稳定的路径。
+    - `ensure_copy` 用于镜像已有 .pt 文件
+    - `load_obj` / `save_obj` 用于缓存任意 Python 对象（通常是样本 dict）
+    """
 
     def __init__(self, root: Optional[str], namespace: str):
         self.root = _resolve_root(root)

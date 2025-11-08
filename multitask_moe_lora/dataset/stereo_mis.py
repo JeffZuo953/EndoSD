@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from configparser import ConfigParser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -11,6 +10,7 @@ import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
+from .metadata.stereomis import StereoMISMetadata
 from .transform import NormalizeImage, PrepareForNet, Resize
 from .utils import compute_valid_mask
 
@@ -66,6 +66,7 @@ class StereoMISDataset(Dataset):
         max_depth: float = 0.3,
         disparity_scale: float = 256.0,
         calibration_path: str | Path | None = None,
+        sequences: Optional[Sequence[str]] = None,
     ) -> None:
         self.root_dir = Path(root_dir).expanduser()
         self.split = split.lower()
@@ -75,6 +76,12 @@ class StereoMISDataset(Dataset):
         self._explicit_calibration_path: Optional[Path] = (
             Path(calibration_path).expanduser() if calibration_path is not None else None
         )
+        if sequences is None:
+            self._sequence_filter: Optional[List[str]] = None
+        elif isinstance(sequences, str):
+            self._sequence_filter = [sequences]
+        else:
+            self._sequence_filter = [str(seq) for seq in sequences]
 
         self._samples: List[_StereoMISSample] = self._collect_samples()
         if not self._samples:
@@ -102,7 +109,7 @@ class StereoMISDataset(Dataset):
         )
 
         self._sequence_intrinsics: Dict[str, torch.Tensor] = {}
-        self._default_intrinsics: Optional[torch.Tensor] = None
+        self._missing_intrinsics: set[str] = set()
         self._load_intrinsics_information()
 
     # --------------------------------------------------------------------- #
@@ -159,6 +166,7 @@ class StereoMISDataset(Dataset):
             provided_mask_tensor = torch.from_numpy(transformed["valid_mask"]).bool()
             valid_mask = valid_mask & provided_mask_tensor
 
+        dataset_name = getattr(self, "dataset_name", "StereoMIS")
         result: Dict[str, torch.Tensor | str] = {
             "image": image_tensor,
             "depth": depth_tensor,
@@ -167,6 +175,7 @@ class StereoMISDataset(Dataset):
             "depth_path": str(sample.depth_path),
             "max_depth": self.max_depth,
             "source_type": "LS",
+            "dataset_name": dataset_name,
         }
 
         if sample.mask_path is not None:
@@ -174,10 +183,13 @@ class StereoMISDataset(Dataset):
             result["semseg_mask"] = mask_tensor
             result["mask_path"] = str(sample.mask_path)
 
-        intrinsics_tensor = self._sequence_intrinsics.get(sample.sequence)
+        seq_key = sample.sequence.lower()
+        intrinsics_tensor = self._sequence_intrinsics.get(seq_key)
         if intrinsics_tensor is None:
-            intrinsics_tensor = self._default_intrinsics
-        if intrinsics_tensor is not None:
+            if seq_key not in self._missing_intrinsics:
+                logger.error("[StereoMIS] Missing camera metadata for sequence '%s'; skipping intrinsics.", sample.sequence)
+                self._missing_intrinsics.add(seq_key)
+        else:
             result["intrinsics"] = intrinsics_tensor
 
         return result
@@ -198,131 +210,25 @@ class StereoMISDataset(Dataset):
     # Internal helpers
     # --------------------------------------------------------------------- #
     def _load_intrinsics_information(self) -> None:
-        """加载每个序列或全局的相机内参。"""
-        sequence_intrinsics: Dict[str, torch.Tensor] = {}
-        for calib_txt in self.root_dir.glob("**/camera_calibration.txt"):
-            seq_name = calib_txt.parent.name
-            intrinsics = self._parse_camera_calibration_txt(calib_txt)
-            if intrinsics is not None:
-                sequence_intrinsics[seq_name] = intrinsics
-
-        self._sequence_intrinsics = sequence_intrinsics
-        if self._sequence_intrinsics:
+        """加载每个序列的相机内参（仅依赖 metadata）。"""
+        metadata_table = StereoMISMetadata.get_sequence_table()
+        if not metadata_table:
+            logger.error("StereoMIS metadata table is empty; camera intrinsics disabled.")
+            self._sequence_intrinsics = {}
             return
 
-        calibration_ini = self._resolve_calibration_ini()
-        if calibration_ini is None:
-            return
-
-        default_intrinsics = self._parse_stereo_calibration_ini(calibration_ini)
-        if default_intrinsics is not None:
-            self._default_intrinsics = default_intrinsics
-
-    def _resolve_calibration_ini(self) -> Optional[Path]:
-        candidates: List[Path] = []
-        if self._explicit_calibration_path is not None:
-            candidates.append(self._explicit_calibration_path)
-
-        candidate_names = ("StereoCalibration.ini", "stereo_calibration.ini", "stereocalibration.ini")
-        dataset_root = Path(__file__).resolve().parent
-        for name in candidate_names:
-            candidates.extend(
-                [
-                    self.root_dir / name,
-                    self.root_dir.parent / name,
-                    dataset_root / name,
-                    dataset_root.parent / name,
-                ]
-            )
-
-        seen: set[Path] = set()
-        for candidate in candidates:
-            candidate = candidate.resolve()
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            if candidate.exists() and candidate.is_file():
-                return candidate
-        return None
-
-    @staticmethod
-    def _parse_camera_calibration_txt(calib_path: Path) -> Optional[torch.Tensor]:
-        fx = fy = cx = cy = None
-        try:
-            with open(calib_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("//"):
-                        continue
-                    if line.startswith("Camera-0-F:"):
-                        parts = line.split(":", 1)[1].split("//")[0].strip().split()
-                        if len(parts) >= 2:
-                            fx, fy = map(float, parts[:2])
-                    elif line.startswith("Camera-0-C:"):
-                        parts = line.split(":", 1)[1].split("//")[0].strip().split()
-                        if len(parts) >= 2:
-                            cx, cy = map(float, parts[:2])
-                    if fx is not None and fy is not None and cx is not None and cy is not None:
-                        break
-        except OSError:
-            return None
-
-        if None in (fx, fy, cx, cy):
-            return None
-
-        return torch.tensor(
-            [
-                [fx, 0.0, cx],
-                [0.0, fy, cy],
-                [0.0, 0.0, 1.0],
-            ],
-            dtype=torch.float32,
-        )
-
-    @staticmethod
-    def _parse_stereo_calibration_ini(calibration_ini: Path) -> Optional[torch.Tensor]:
-        parser = ConfigParser()
-        try:
-            with calibration_ini.open("r", encoding="utf-8") as f:
-                parser.read_file(f)
-        except OSError:
-            return None
-
-        section = None
-        if parser.has_section("StereoLeft"):
-            section = parser["StereoLeft"]
-        elif parser.sections():
-            section = parser[parser.sections()[0]]
-
-        if section is None:
-            return None
-
-        try:
-            fx = float(section.get("fc_x"))
-            fy = float(section.get("fc_y"))
-            cx = float(section.get("cc_x"))
-            cy = float(section.get("cc_y"))
-        except (TypeError, ValueError):
-            return None
-
-        return torch.tensor(
-            [
-                [fx, 0.0, cx],
-                [0.0, fy, cy],
-                [0.0, 0.0, 1.0],
-            ],
-            dtype=torch.float32,
-        )
+        self._sequence_intrinsics = {
+            seq.lower(): info.intrinsics.clone().to(torch.float32) for seq, info in metadata_table.items()
+        }
 
     def _collect_samples(self) -> List[_StereoMISSample]:
-        depth_npy_root = self.root_dir / "depth_npy"
-        if depth_npy_root.exists():
-            try:
-                return self._collect_sequence_layout(depth_npy_root)
-            except FileNotFoundError:
-                pass
-            except RuntimeError:
-                pass
+        for depth_dir_name in ("depth", "depth_npy"):
+            depth_root = self.root_dir / depth_dir_name
+            if depth_root.exists():
+                try:
+                    return self._collect_sequence_layout(depth_root)
+                except (FileNotFoundError, RuntimeError):
+                    continue
 
         try:
             return self._collect_rectified_left_layout()
@@ -338,7 +244,13 @@ class StereoMISDataset(Dataset):
         if not available_sequences:
             raise FileNotFoundError(f"在 {depth_root} 下未找到任何有效序列目录。")
 
-        if self.split == "all":
+        if self._sequence_filter is not None:
+            target_sequences = [seq for seq in self._sequence_filter if seq in available_sequences]
+            if not target_sequences:
+                raise RuntimeError(
+                    f"sequence 过滤器 {self._sequence_filter} 与 {available_sequences} 无交集。"
+                )
+        elif self.split == "all":
             target_sequences = available_sequences
         else:
             preset = self.DEFAULT_SEQUENCE_SPLITS.get(self.split)
@@ -390,7 +302,13 @@ class StereoMISDataset(Dataset):
         if not sequence_dirs:
             raise FileNotFoundError(f"在 {self.root_dir} 下未找到包含 rectified_left/pred_rectified_depth 的序列目录。")
 
-        if self.split == "all":
+        if self._sequence_filter is not None:
+            target_sequences = [seq for seq in self._sequence_filter if seq in sequence_dirs]
+            if not target_sequences:
+                raise RuntimeError(
+                    f"sequence 过滤器 {self._sequence_filter} 与 rectified_left 序列 {sorted(sequence_dirs.keys())} 无交集。"
+                )
+        elif self.split == "all":
             target_sequences = sorted(sequence_dirs.keys())
         else:
             preset = self.DEFAULT_SEQUENCE_SPLITS.get(self.split)
@@ -575,53 +493,3 @@ class StereoMISDataset(Dataset):
         if mask_img.ndim == 3:
             mask_img = cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY)
         return (mask_img > 0).astype(np.bool_)
-
-
-def _parse_args():
-    import argparse
-
-    parser = argparse.ArgumentParser(description="生成 StereoMIS 数据集缓存。")
-    parser.add_argument("--root", type=Path, required=True, help="StereoMIS 数据集根目录")
-    parser.add_argument(
-        "--split",
-        type=str,
-        default="train",
-        choices=["train", "val", "test", "all"],
-        help="需要处理的数据划分",
-    )
-    parser.add_argument("--output-dir", type=Path, required=True, help="缓存列表(.txt)的输出目录")
-    parser.add_argument("--filelist-name", type=str, default=None, help="缓存列表文件名")
-    parser.add_argument("--cache-root", type=Path, default=None, help="缓存 .pt 文件的目标根目录")
-    parser.add_argument("--max-depth", type=float, default=0.3, help="深度截断最大值 (米)")
-    parser.add_argument("--disparity-scale", type=float, default=256.0, help="旧版 disparity PNG 的缩放因子")
-    parser.add_argument("--limit", type=int, default=None, help="限制样本数，便于快速调试")
-    return parser.parse_args()
-
-
-def _main():
-    from dataset.cache_utils import generate_dataset_cache
-
-    args = _parse_args()
-    dataset = StereoMISDataset(
-        root_dir=str(args.root),
-        split=args.split,
-        max_depth=args.max_depth,
-        disparity_scale=args.disparity_scale,
-    )
-
-    dataset.limit(args.limit)
-
-    filelist_name = args.filelist_name if args.filelist_name else f"{args.split}_cache.txt"
-    cache_root = args.cache_root if args.cache_root is not None else args.output_dir
-
-    generate_dataset_cache(
-        dataset=dataset,
-        output_dir=str(args.output_dir),
-        filelist_name=filelist_name,
-        origin_prefix=str(args.root),
-        cache_root_path=str(cache_root),
-    )
-
-
-if __name__ == "__main__":
-    _main()

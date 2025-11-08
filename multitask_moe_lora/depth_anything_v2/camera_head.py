@@ -1,14 +1,50 @@
+import math
+
 import torch
 import torch.nn as nn
+
+
+class TokenLoRAAdapter(nn.Module):
+    """Light-weight adapter that perturbs tokens before the camera head."""
+
+    def __init__(self, dim: int, rank: int = 0, alpha: int = 1, dropout: float = 0.0):
+        super().__init__()
+        self.rank = rank
+        if rank <= 0:
+            self.register_parameter("lora_a", None)
+            self.register_parameter("lora_b", None)
+            self.dropout = nn.Identity()
+            self.scaling = 0.0
+            return
+        self.lora_a = nn.Parameter(torch.zeros(rank, dim))
+        self.lora_b = nn.Parameter(torch.zeros(dim, rank))
+        nn.init.kaiming_uniform_(self.lora_a, a=math.sqrt(5))
+        nn.init.zeros_(self.lora_b)
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+        self.scaling = alpha / rank
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        if self.rank <= 0:
+            return tokens
+        delta = (self.dropout(tokens) @ self.lora_a.T @ self.lora_b.T) * self.scaling
+        return tokens + delta
 
 
 class _BaseCameraHead(nn.Module):
     """Common utilities shared by camera heads."""
 
-    def __init__(self, embed_dim: int, hidden_dim: int = 512):
+    def __init__(
+        self,
+        embed_dim: int,
+        hidden_dim: int = 512,
+        adapter_rank: int = 0,
+        adapter_alpha: int = 1,
+        adapter_dropout: float = 0.0,
+    ):
         super().__init__()
         self.embed_dim = embed_dim
         self.hidden_dim = hidden_dim
+        self.input_adapter = TokenLoRAAdapter(embed_dim, adapter_rank, adapter_alpha, adapter_dropout)
         self.output_head = nn.Sequential(
             nn.LayerNorm(embed_dim),
             nn.Linear(embed_dim, hidden_dim),
@@ -36,8 +72,11 @@ class SimpleCameraHead(_BaseCameraHead):
         num_layers: int = 2,
         num_heads: int = 8,
         dropout: float = 0.0,
+        adapter_rank: int = 0,
+        adapter_alpha: int = 1,
+        adapter_dropout: float = 0.0,
     ) -> None:
-        super().__init__(embed_dim, hidden_dim)
+        super().__init__(embed_dim, hidden_dim, adapter_rank, adapter_alpha, adapter_dropout)
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
             nhead=num_heads,
@@ -56,7 +95,8 @@ class SimpleCameraHead(_BaseCameraHead):
         Returns:
             Tensor [B, 4] with normalized fx, fy, cx, cy.
         """
-        encoded = self.encoder(patch_tokens)
+        tokens = self.input_adapter(patch_tokens)
+        encoded = self.encoder(tokens)
         global_feat = encoded.mean(dim=1)
         logits = self.output_head(global_feat)
         return self._normalize_output(logits)
@@ -77,8 +117,11 @@ class VGGTLiteCameraHead(_BaseCameraHead):
         num_layers: int = 4,
         num_heads: int = 8,
         dropout: float = 0.0,
+        adapter_rank: int = 0,
+        adapter_alpha: int = 1,
+        adapter_dropout: float = 0.0,
     ) -> None:
-        super().__init__(embed_dim, hidden_dim)
+        super().__init__(embed_dim, hidden_dim, adapter_rank, adapter_alpha, adapter_dropout)
         self.camera_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.register_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         nn.init.normal_(self.camera_token, std=1e-6)
@@ -105,7 +148,7 @@ class VGGTLiteCameraHead(_BaseCameraHead):
         bsz = patch_tokens.size(0)
         camera_tok = self.camera_token.expand(bsz, -1, -1)
         register_tok = self.register_token.expand(bsz, -1, -1)
-        tokens = torch.cat([camera_tok, register_tok, patch_tokens], dim=1)
+        tokens = torch.cat([camera_tok, register_tok, self.input_adapter(patch_tokens)], dim=1)
         encoded = self.encoder(tokens)
         camera_feat = encoded[:, 0]  # camera token position
         logits = self.output_head(camera_feat)

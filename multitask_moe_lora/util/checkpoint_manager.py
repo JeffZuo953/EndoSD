@@ -54,6 +54,7 @@ class CheckpointManager:
         self.config = config
         self.logger = logger
         self.rank = rank
+        self._saved_checkpoints: Dict[str, int] = {}
         
         # 初始化最佳指标跟踪器
         self.best_metrics = {
@@ -80,6 +81,7 @@ class CheckpointManager:
             suffix=suffix,
             rank=self.rank
         )
+        self._saved_checkpoints[suffix] = epoch + 1
 
     def update_and_save(self,
                         epoch: int,
@@ -172,3 +174,13 @@ class CheckpointManager:
         sanitized = ''.join(ch.lower() if ch.isalnum() else '_' for ch in name)
         sanitized = sanitized.strip('_')
         return sanitized or "dataset"
+
+    def log_saved_checkpoints(self) -> None:
+        if self.rank != 0:
+            return
+        if not self._saved_checkpoints:
+            self.logger.info("No checkpoints were saved during training.")
+            return
+        self.logger.info("Checkpoints saved（epoch为1-based）:")
+        for suffix, epoch in self._saved_checkpoints.items():
+            self.logger.info(f"  {suffix}: epoch {epoch}")

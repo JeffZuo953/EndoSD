@@ -1,3 +1,4 @@
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +10,8 @@ import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
-from .camera_utils import CameraInfo, make_camera_info, register_camera_provider
+from .camera_utils import CameraInfo, normalize_intrinsics
+from .metadata.dvpn import DVPNMetadata
 from .transform import NormalizeImage, PrepareForNet, Resize
 from .utils import compute_valid_mask
 
@@ -21,8 +23,15 @@ class _DVPNSample:
     sequence: str
 
 
+logger = logging.getLogger(__name__)
+
+
 class DVPNDataset(Dataset):
     """Loader for the dVPN (daVinci) depth dataset consisting of PNG RGB frames and depth NPY files."""
+
+    CAMERA_WIDTH: int = DVPNMetadata.WIDTH
+    CAMERA_HEIGHT: int = DVPNMetadata.HEIGHT
+    CAMERA_INFO: Optional[CameraInfo] = DVPNMetadata.get_camera_info()
 
     def __init__(
         self,
@@ -39,6 +48,7 @@ class DVPNDataset(Dataset):
         self.max_depth = max_depth
         self.min_depth = min_depth
         self.camera_index = camera_index
+        self._camera_warning_emitted = False
 
         if self.split not in {"train", "test"}:
             raise ValueError(f"Unsupported split '{split}'. Expected 'train' or 'test'.")
@@ -140,22 +150,19 @@ class DVPNDataset(Dataset):
         }
         camera_info = self.get_camera_info()
         if camera_info is not None:
-            result["camera_intrinsics"] = camera_info.intrinsics.clone()
-            result["camera_intrinsics_norm"] = camera_info.intrinsics_norm.clone()
+            intrinsics = camera_info.intrinsics.clone().to(torch.float32)
+            result["camera_intrinsics"] = intrinsics
+            result["camera_intrinsics_norm"] = normalize_intrinsics(intrinsics, camera_info.width, camera_info.height)
             result["camera_size"] = torch.tensor([camera_info.width, camera_info.height], dtype=torch.float32)
+            result["camera_size_original"] = torch.tensor([camera_info.width, camera_info.height], dtype=torch.float32)
+            result["camera_image_size"] = torch.tensor([float(image_tensor.shape[-1]), float(image_tensor.shape[-2])], dtype=torch.float32)
+            result["camera_original_image_size"] = torch.tensor([float(image_bgr.shape[1]), float(image_bgr.shape[0])], dtype=torch.float32)
+        elif not self._camera_warning_emitted:
+            logger.error("dVPN metadata missing camera intrinsics; skipping camera fields.")
+            self._camera_warning_emitted = True
         return result
 
     @staticmethod
     def get_camera_info(_: Optional[str] = None) -> Optional[CameraInfo]:
         """Return fixed intrinsics for dVPN dataset."""
-        return make_camera_info(
-            width=384,
-            height=192,
-            fx=373.47833252,
-            fy=373.47833252,
-            cx=182.91804504,
-            cy=113.72999573,
-        )
-
-
-register_camera_provider("dvpn", DVPNDataset.get_camera_info)
+        return DVPNMetadata.get_camera_info()

@@ -10,7 +10,8 @@ import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
-from .camera_utils import CameraInfo, make_camera_info, normalize_intrinsics, register_camera_provider
+from .camera_utils import CameraInfo, make_camera_info, normalize_intrinsics
+from .metadata.scared import SCAREDMetadata
 from .transform import NormalizeImage, PrepareForNet, Resize
 from .utils import compute_valid_mask
 
@@ -42,8 +43,13 @@ class SCardDataset(Dataset):
     runtime.
     """
 
-    _camera_info_cache: Dict[str, CameraInfo] = {}
-    _intrinsics_root: Path = Path(os.path.expanduser("~/ssde/data/LS/SCARED/intrisics")).resolve()
+    CAMERA_WIDTH: int = 1350
+    CAMERA_HEIGHT: int = 1080
+    CAMERA_INTRINSICS_ROOT: Path = Path(os.path.expanduser("~/ssde/data/LS/SCARED/intrisics")).resolve()
+
+    # Static registries populated on-demand the first time intrinsics are needed.
+    CAMERA_INFO_CACHE: Dict[str, CameraInfo] = {}
+    CAMERA_INFO_BY_DATASET: Dict[str, Dict[str, CameraInfo]] = {}
 
     def __init__(
         self,
@@ -189,6 +195,9 @@ class SCardDataset(Dataset):
         result["camera_intrinsics"] = intrinsics_tensor
         result["camera_intrinsics_norm"] = normalize_intrinsics(intrinsics_tensor, width_px, height_px)
         result["camera_size"] = torch.tensor([width_px, height_px], dtype=torch.float32)
+        result["camera_size_original"] = torch.tensor([self.CAMERA_WIDTH, self.CAMERA_HEIGHT], dtype=torch.float32)
+        result["camera_image_size"] = torch.tensor([float(image_tensor.shape[-1]), float(image_tensor.shape[-2])], dtype=torch.float32)
+        result["camera_original_image_size"] = torch.tensor([float(width_px), float(height_px)], dtype=torch.float32)
         result["depth_path"] = depth_path
         result["pose_path"] = pose_path
         result["source_type"] = "scard"
@@ -200,12 +209,12 @@ class SCardDataset(Dataset):
     # ----------------------------------------------------------------------
     @classmethod
     def _load_camera_info(cls) -> None:
-        if cls._camera_info_cache:
+        if cls.CAMERA_INFO_CACHE:
             return
-        if not cls._intrinsics_root.exists():
+        if not cls.CAMERA_INTRINSICS_ROOT.exists():
             return
 
-        for dataset_dir in sorted(cls._intrinsics_root.glob("dataset_*")):
+        for dataset_dir in sorted(cls.CAMERA_INTRINSICS_ROOT.glob("dataset_*")):
             dataset_name = dataset_dir.name.lower()
             for key_dir in sorted(dataset_dir.glob("keyfram_*")):
                 key_id = key_dir.name.split("_")[-1]
@@ -224,20 +233,25 @@ class SCardDataset(Dataset):
                 cx = float(matrix[0, 2])
                 cy = float(matrix[1, 2])
                 cache_key = f"{dataset_name}/keyframe_{int(key_id):02d}"
-                cls._camera_info_cache[cache_key] = make_camera_info(
-                    width=1350,
-                    height=1080,
+                info = make_camera_info(
+                    width=cls.CAMERA_WIDTH,
+                    height=cls.CAMERA_HEIGHT,
                     fx=fx,
                     fy=fy,
                     cx=cx,
                     cy=cy,
                 )
+                cls.CAMERA_INFO_CACHE[cache_key] = info
+                dataset_bucket = cls.CAMERA_INFO_BY_DATASET.setdefault(dataset_name, {})
+                dataset_bucket[cache_key] = info
 
     @classmethod
     def _lookup_camera_info(cls, sample_path: Optional[str]) -> Optional[CameraInfo]:
         if not sample_path:
             return None
-        cls._load_camera_info()
+        info_metadata = SCAREDMetadata.get_camera_info(sample_path)
+        if info_metadata is not None:
+            return info_metadata
         normalized_path = sample_path.replace("\\", "/").lower()
         dataset_match = re.search(r"dataset_(\d+)", normalized_path)
         keyframe_match = re.search(r"keyfram?e?_(\d+)", normalized_path)
@@ -246,12 +260,12 @@ class SCardDataset(Dataset):
         dataset_idx = int(dataset_match.group(1))
         keyframe_idx = int(keyframe_match.group(1))
         key = f"dataset_{dataset_idx}/keyframe_{keyframe_idx:02d}"
-        info = cls._camera_info_cache.get(key)
+        info = cls.CAMERA_INFO_CACHE.get(key)
         if info is not None:
             return info
         # fallback to dataset-level (if available)
         prefix = f"dataset_{dataset_idx}/"
-        for cache_key, entry in cls._camera_info_cache.items():
+        for cache_key, entry in cls.CAMERA_INFO_CACHE.items():
             if cache_key.startswith(prefix):
                 return entry
         return None
@@ -332,11 +346,3 @@ class SCardDataset(Dataset):
         # Ensure the cache directory exists before saving
         os.makedirs(os.path.dirname(self.intrinsics_cache_path), exist_ok=True)
         torch.save(self.intrinsics_map, self.intrinsics_cache_path)
-
-
-def _register_camera_provider() -> None:
-    register_camera_provider("scared", SCardDataset.get_camera_info)
-    register_camera_provider("scard", SCardDataset.get_camera_info)
-
-
-_register_camera_provider()

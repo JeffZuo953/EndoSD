@@ -7,6 +7,7 @@
 import os
 import logging
 import math
+import copy
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset as TorchDataset, Subset
@@ -16,6 +17,57 @@ from torch.utils.data import ConcatDataset
 from ..dataset.cache_utils import DepthCacheDataset, SegCacheDataset
 from ..dataset.filelist_seg_depth import FileListSegDepthDataset
 from .config import TrainingConfig
+
+BASE_DATA_PATH = os.environ.get("BASE_DATA_PATH", "/data/ziyi/multitask")
+_BASE_DATA_PREFIX = "/data/ziyi/multitask"
+
+_DEFAULT_HOME_SSD = os.path.join(os.path.expanduser("~"), "ssde")
+HOME_SSD_PATH = os.environ.get("HOME_SSD_PATH", _DEFAULT_HOME_SSD)
+HOME_SSD_PATH = os.path.abspath(os.path.expanduser(HOME_SSD_PATH))
+
+_RAW_HOME_SSD_PREFIXES = (
+    "/home/ziyi/ssde",
+    "~/ssde",
+)
+_HOME_SSD_PREFIXES = tuple({
+    os.path.abspath(os.path.expanduser(os.path.expandvars(prefix)))
+    for prefix in (_RAW_HOME_SSD_PREFIXES + (HOME_SSD_PATH,))
+})
+
+
+def _rewrite_path(path: str) -> str:
+    if not isinstance(path, str):
+        return path
+
+    expanded = os.path.expandvars(path)
+    expanded = os.path.expanduser(expanded)
+
+    for literal_prefix in _RAW_HOME_SSD_PREFIXES + (HOME_SSD_PATH,):
+        if path.startswith(literal_prefix):
+            rel = path[len(literal_prefix):].lstrip("/\\")
+            return os.path.join(HOME_SSD_PATH, rel)
+
+    for prefix in _HOME_SSD_PREFIXES:
+        if expanded.startswith(prefix):
+            rel = expanded[len(prefix):].lstrip("/\\")
+            return os.path.join(HOME_SSD_PATH, rel)
+
+    expanded_base = os.path.abspath(os.path.expanduser(os.path.expandvars(_BASE_DATA_PREFIX)))
+    if expanded.startswith(expanded_base):
+        rel = expanded[len(expanded_base):].lstrip("/\\")
+        return os.path.join(BASE_DATA_PATH, rel)
+
+    return expanded
+
+
+def _normalize_dataset_paths(obj):
+    if isinstance(obj, dict):
+        return {k: _normalize_dataset_paths(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_normalize_dataset_paths(v) for v in obj]
+    if isinstance(obj, str):
+        return _rewrite_path(obj)
+    return obj
 
 
 def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -40,7 +92,16 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     images, depths, masks, max_depths, source_types, dataset_names = [], [], [], [], [], []
     valid_masks, depth_valid_masks, seg_valid_masks = [], [], []
-    camera_intrinsics, camera_norms, camera_sizes = [], [], []
+    camera_intrinsics: List[Optional[torch.Tensor]] = []
+    camera_intrinsics_mask: List[bool] = []
+    camera_intrinsics_shape: Optional[torch.Size] = None
+    has_camera_intrinsics = False
+    camera_norms: List[torch.Tensor] = []
+    camera_norms_mask: List[bool] = []
+    has_camera_norms = False
+    camera_sizes: List[torch.Tensor] = []
+    camera_sizes_mask: List[bool] = []
+    has_camera_sizes = False
 
     for item in batch:
         image = item["image"]
@@ -98,23 +159,37 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
             padded_seg_valid = F.pad(seg_valid, (0, pad_w, 0, pad_h), mode="constant", value=0)
             seg_valid_masks.append(padded_seg_valid.to(torch.bool))
 
-        if "camera_intrinsics" in item:
-            camera_mat = item["camera_intrinsics"]
-            if not torch.is_tensor(camera_mat):
-                camera_mat = torch.as_tensor(camera_mat, dtype=torch.float32)
-            camera_intrinsics.append(camera_mat.to(torch.float32))
+        camera_norm_value = item.get("camera_intrinsics_norm")
+        if camera_norm_value is not None:
+            norm_tensor = camera_norm_value if torch.is_tensor(camera_norm_value) else torch.as_tensor(camera_norm_value, dtype=torch.float32)
+            camera_norms.append(norm_tensor.to(torch.float32))
+            camera_norms_mask.append(True)
+            has_camera_norms = True
+        else:
+            camera_norms.append(torch.zeros(4, dtype=torch.float32))
+            camera_norms_mask.append(False)
 
-        if "camera_intrinsics_norm" in item:
-            camera_norm = item["camera_intrinsics_norm"]
-            if not torch.is_tensor(camera_norm):
-                camera_norm = torch.as_tensor(camera_norm, dtype=torch.float32)
-            camera_norms.append(camera_norm.to(torch.float32))
+        camera_intr_value = item.get("camera_intrinsics")
+        if camera_intr_value is not None:
+            intr_tensor = camera_intr_value if torch.is_tensor(camera_intr_value) else torch.as_tensor(camera_intr_value, dtype=torch.float32)
+            intr_tensor = intr_tensor.to(torch.float32)
+            camera_intrinsics.append(intr_tensor)
+            camera_intrinsics_mask.append(True)
+            camera_intrinsics_shape = intr_tensor.shape
+            has_camera_intrinsics = True
+        else:
+            camera_intrinsics.append(None)
+            camera_intrinsics_mask.append(False)
 
-        if "camera_size" in item:
-            size_tensor = item["camera_size"]
-            if not torch.is_tensor(size_tensor):
-                size_tensor = torch.as_tensor(size_tensor, dtype=torch.float32)
+        camera_size_value = item.get("camera_size")
+        if camera_size_value is not None:
+            size_tensor = camera_size_value if torch.is_tensor(camera_size_value) else torch.as_tensor(camera_size_value, dtype=torch.float32)
             camera_sizes.append(size_tensor.to(torch.float32))
+            camera_sizes_mask.append(True)
+            has_camera_sizes = True
+        else:
+            camera_sizes.append(torch.zeros(2, dtype=torch.float32))
+            camera_sizes_mask.append(False)
 
     result = {"image": torch.stack(images)}
 
@@ -145,12 +220,26 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     if seg_valid_masks:
         result["seg_valid_mask"] = torch.stack(seg_valid_masks)
 
-    if camera_intrinsics:
-        result["camera_intrinsics"] = torch.stack(camera_intrinsics)
-    if camera_norms:
+    if has_camera_intrinsics:
+        if camera_intrinsics_shape is None:
+            for tensor, flag in zip(camera_intrinsics, camera_intrinsics_mask):
+                if flag and tensor is not None:
+                    camera_intrinsics_shape = tensor.shape
+                    break
+        if camera_intrinsics_shape is not None:
+            placeholder = torch.zeros(camera_intrinsics_shape, dtype=torch.float32)
+            stacked_intrinsics = [
+                tensor if (tensor is not None) else placeholder.clone()
+                for tensor in camera_intrinsics
+            ]
+            result["camera_intrinsics"] = torch.stack(stacked_intrinsics)
+            result["camera_intrinsics_mask"] = torch.tensor(camera_intrinsics_mask, dtype=torch.bool)
+    if has_camera_norms:
         result["camera_intrinsics_norm"] = torch.stack(camera_norms)
-    if camera_sizes:
+        result["camera_intrinsics_norm_mask"] = torch.tensor(camera_norms_mask, dtype=torch.bool)
+    if has_camera_sizes:
         result["camera_size"] = torch.stack(camera_sizes)
+        result["camera_size_mask"] = torch.tensor(camera_sizes_mask, dtype=torch.bool)
 
     return result
 
@@ -168,7 +257,16 @@ def _make_collate_fn(stride: int):
 
         images, depths, masks, max_depths, source_types, dataset_names = [], [], [], [], [], []
         valid_masks, depth_valid_masks, seg_valid_masks = [], [], []
-        camera_intrinsics, camera_norms, camera_sizes = [], [], []
+        camera_intrinsics: List[Optional[torch.Tensor]] = []
+        camera_intrinsics_mask: List[bool] = []
+        camera_intrinsics_shape: Optional[torch.Size] = None
+        has_camera_intrinsics = False
+        camera_norms: List[torch.Tensor] = []
+        camera_norms_mask: List[bool] = []
+        has_camera_norms = False
+        camera_sizes: List[torch.Tensor] = []
+        camera_sizes_mask: List[bool] = []
+        has_camera_sizes = False
         for item in batch:
             image = item["image"]
             h, w = image.shape[-2:]
@@ -211,23 +309,37 @@ def _make_collate_fn(stride: int):
                 seg_valid = item["seg_valid_mask"].float()
                 seg_valid_masks.append(F.pad(seg_valid, (0, pad_w, 0, pad_h), mode="constant", value=0).to(torch.bool))
 
-            if "camera_intrinsics" in item:
-                camera_mat = item["camera_intrinsics"]
-                if not torch.is_tensor(camera_mat):
-                    camera_mat = torch.as_tensor(camera_mat, dtype=torch.float32)
-                camera_intrinsics.append(camera_mat.to(torch.float32))
+            camera_norm_value = item.get("camera_intrinsics_norm")
+            if camera_norm_value is not None:
+                norm_tensor = camera_norm_value if torch.is_tensor(camera_norm_value) else torch.as_tensor(camera_norm_value, dtype=torch.float32)
+                camera_norms.append(norm_tensor.to(torch.float32))
+                camera_norms_mask.append(True)
+                has_camera_norms = True
+            else:
+                camera_norms.append(torch.zeros(4, dtype=torch.float32))
+                camera_norms_mask.append(False)
 
-            if "camera_intrinsics_norm" in item:
-                camera_norm = item["camera_intrinsics_norm"]
-                if not torch.is_tensor(camera_norm):
-                    camera_norm = torch.as_tensor(camera_norm, dtype=torch.float32)
-                camera_norms.append(camera_norm.to(torch.float32))
+            camera_intr_value = item.get("camera_intrinsics")
+            if camera_intr_value is not None:
+                intr_tensor = camera_intr_value if torch.is_tensor(camera_intr_value) else torch.as_tensor(camera_intr_value, dtype=torch.float32)
+                intr_tensor = intr_tensor.to(torch.float32)
+                camera_intrinsics.append(intr_tensor)
+                camera_intrinsics_mask.append(True)
+                camera_intrinsics_shape = intr_tensor.shape
+                has_camera_intrinsics = True
+            else:
+                camera_intrinsics.append(None)
+                camera_intrinsics_mask.append(False)
 
-            if "camera_size" in item:
-                size_tensor = item["camera_size"]
-                if not torch.is_tensor(size_tensor):
-                    size_tensor = torch.as_tensor(size_tensor, dtype=torch.float32)
+            camera_size_value = item.get("camera_size")
+            if camera_size_value is not None:
+                size_tensor = camera_size_value if torch.is_tensor(camera_size_value) else torch.as_tensor(camera_size_value, dtype=torch.float32)
                 camera_sizes.append(size_tensor.to(torch.float32))
+                camera_sizes_mask.append(True)
+                has_camera_sizes = True
+            else:
+                camera_sizes.append(torch.zeros(2, dtype=torch.float32))
+                camera_sizes_mask.append(False)
 
         result = {"image": torch.stack(images)}
         if source_types:
@@ -251,12 +363,26 @@ def _make_collate_fn(stride: int):
             result["semseg_mask"] = mask_tensor
         if seg_valid_masks:
             result["seg_valid_mask"] = torch.stack(seg_valid_masks)
-        if camera_intrinsics:
-            result["camera_intrinsics"] = torch.stack(camera_intrinsics)
-        if camera_norms:
+        if has_camera_intrinsics:
+            if camera_intrinsics_shape is None:
+                for tensor, flag in zip(camera_intrinsics, camera_intrinsics_mask):
+                    if flag and tensor is not None:
+                        camera_intrinsics_shape = tensor.shape
+                        break
+            if camera_intrinsics_shape is not None:
+                placeholder = torch.zeros(camera_intrinsics_shape, dtype=torch.float32)
+                stacked_intrinsics = [
+                    tensor if (tensor is not None) else placeholder.clone()
+                    for tensor in camera_intrinsics
+                ]
+                result["camera_intrinsics"] = torch.stack(stacked_intrinsics)
+                result["camera_intrinsics_mask"] = torch.tensor(camera_intrinsics_mask, dtype=torch.bool)
+        if has_camera_norms:
             result["camera_intrinsics_norm"] = torch.stack(camera_norms)
-        if camera_sizes:
+            result["camera_intrinsics_norm_mask"] = torch.tensor(camera_norms_mask, dtype=torch.bool)
+        if has_camera_sizes:
             result["camera_size"] = torch.stack(camera_sizes)
+            result["camera_size_mask"] = torch.tensor(camera_sizes_mask, dtype=torch.bool)
         return result
 
     return collate_fn
@@ -511,6 +637,44 @@ def _get_dataset_name(ds: TorchDataset) -> Optional[str]:
     return getattr(ds, "dataset_name", getattr(ds, "dataset_type", None))
 
 
+_DATASET_NAME_HINTS = {
+    "kidney3d": "Kidney3D",
+    "rirs-segp": "RIRS-SegP",
+    "rirs-segc": "RIRS-SegC",
+    "clinicdb": "clinicDB",
+    "cvc-endoscene": "CVC-EndoScene",
+    "kvasir-seg": "Kvasir-SEG",
+    "bkai-igh-neopolyp": "bkai-igh-neopolyp",
+    "etis-laribpolypdb": "ETIS-LaribPolypDB",
+    "endosynth": "EndoSynth",
+    "endovis2017": "EndoVis2017",
+    "endovis2018": "EndoVis2018",
+    "endonerf": "EndoNeRF",
+    "endomapper": "endomapper_sim",
+    "stereomis": "StereoMIS",
+    "kvasir": "Kvasir-SEG",
+    "clinic": "clinicDB",
+}
+
+
+def _infer_dataset_name(path: str) -> str:
+    if not path:
+        return "unknown"
+    norm_path = os.path.normpath(os.path.expanduser(path))
+    lowered = norm_path.lower()
+    for hint, canonical in _DATASET_NAME_HINTS.items():
+        if hint in lowered:
+            return canonical
+    parent = os.path.basename(os.path.dirname(norm_path))
+    if parent:
+        return parent
+    basename = os.path.basename(norm_path)
+    if basename:
+        stem, _ = os.path.splitext(basename)
+        return stem or basename
+    return "dataset"
+
+
 def _apply_modality_filter(datasets: List[TorchDataset],
                            allowed_names: Optional[Set[str]],
                            dataset_kind: str) -> List[TorchDataset]:
@@ -546,6 +710,53 @@ def _apply_dataset_include(datasets: List[TorchDataset],
     if not filtered:
         raise ValueError(f"No datasets remain for {dataset_kind} after applying dataset include filter {include_set}.")
     return filtered
+
+
+def _expanduser(value):
+    if isinstance(value, str):
+        return os.path.expanduser(value)
+    return value
+
+
+def _normalize_size_pair(size_value, default_size):
+    if size_value is None:
+        return default_size
+    if isinstance(size_value, (list, tuple)):
+        if len(size_value) != 2:
+            raise ValueError(f"size expects two values, got {size_value}")
+        return (int(size_value[0]), int(size_value[1]))
+    if isinstance(size_value, int):
+        return (int(size_value), int(size_value))
+    return default_size
+
+
+def _build_native_depth_dataset(entry: Dict[str, Any], img_size: int, default_max_depth: float) -> TorchDataset:
+    dataset_key = entry.get("dataset")
+    if not dataset_key:
+        raise ValueError("Native dataset entry must include 'dataset' key.")
+    params = dict(entry.get("params", {}))
+    for key, value in list(params.items()):
+        if isinstance(value, str):
+            params[key] = _expanduser(value)
+    params.setdefault("max_depth", entry.get("max_depth", default_max_depth))
+    params.setdefault("size", (img_size, img_size))
+    params["size"] = _normalize_size_pair(params.get("size"), (img_size, img_size))
+
+    dataset_key_lower = str(dataset_key).lower()
+    if dataset_key_lower in {"stereomis", "stereo_mis"}:
+        from ..dataset.stereo_mis import StereoMISDataset
+        ds = StereoMISDataset(**params)
+    elif dataset_key_lower == "hamlyn":
+        from ..dataset.hamlyn import HamlynDataset
+        ds = HamlynDataset(**params)
+    else:
+        raise ValueError(f"Unsupported native dataset '{dataset_key}'.")
+
+    dataset_name = entry.get("name") or entry.get("dataset") or ds.__class__.__name__
+    setattr(ds, "dataset_name", dataset_name)
+    dataset_type = entry.get("dataset_type", dataset_name)
+    setattr(ds, "dataset_type", dataset_type)
+    return ds
 
 
 def _flatten_dataset_parts(dataset: TorchDataset) -> List[Dict[str, Any]]:
@@ -689,7 +900,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "StereoMIS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -726,7 +937,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "StereoMIS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -778,7 +989,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "Kidney3D",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -815,7 +1026,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "Kidney3D",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -854,7 +1065,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "StereoMIS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/all_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/all_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -891,7 +1102,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "StereoMIS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -943,7 +1154,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "Kidney3D",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/all_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/all_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -985,7 +1196,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "Kidney3D",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -1138,7 +1349,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "dataset_type": "LS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -1161,7 +1372,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "dataset_type": "LS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -1228,7 +1439,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "dataset_type": "LS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -1239,7 +1450,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "dataset_type": "LS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -1253,22 +1464,12 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "SCARED",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/all_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "StereoMIS",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/all_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2018",
                 },
@@ -1299,12 +1500,20 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 },
             ],
             "depth_train_filelists": [],
-            "depth_val_caches": [
+            "depth_train_native": [
                 {
-                    "path": "/data/ziyi/multitask/data/LS/hamlyn/cache_pt/all_cache.txt",
+                    "dataset": "StereoMIS",
                     "dataset_type": "LS",
-                    "name": "hamlyn",
-                },
+                    "name": "StereoMIS",
+                    "params": {
+                        "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
+                        "split": "all",
+                        "size": [518, 518],
+                        "max_depth": 0.3,
+                    },
+                }
+            ],
+            "depth_val_caches": [
                 {
                     "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
@@ -1325,8 +1534,27 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "dataset_type": "NO",
                     "name": "EndoMapper",
                 },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoVis2017",
+                },
             ],
             "depth_val_filelists": [],
+            "depth_val_native": [
+                {
+                    "dataset": "hamlyn",
+                    "dataset_type": "LS",
+                    "name": "hamlyn",
+                    "params": {
+                        "filelist_path": "~/ssde/000/abdo/hamlyn_data/filelists/all.txt",
+                        "rootpath": "~/ssde/000/abdo/hamlyn_data",
+                        "mode": "eval",
+                        "size": [518, 518],
+                        "max_depth": 0.3,
+                    },
+                }
+            ],
         },
         'ls_only_v1_filelist': {
             "depth_train_filelists": [
@@ -1344,7 +1572,8 @@ def create_datasets(config: TrainingConfig) -> tuple:
         },
     }
 
-    paths = DATASET_PATHS[active_dataset]
+    paths = copy.deepcopy(DATASET_PATHS[active_dataset])
+    paths = _normalize_dataset_paths(paths)
 
     # 定义路径转换函数映射
     PATH_TRANSFORM_CONFIGS = {
@@ -1450,7 +1679,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "StereoMIS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -1477,7 +1706,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "StereoMIS",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -1499,7 +1728,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
             ],
             "seg_train_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -1521,7 +1750,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
             ],
             "seg_val_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
@@ -1583,6 +1812,14 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 local_cache_dir=local_cache_dir,
             )
             train_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
+        for entry in paths.get("depth_train_native", []):
+            ds = _create_dataset_or_none(
+                lambda entry=entry: _build_native_depth_dataset(entry, config.img_size, config.max_depth),
+                entry.get("name") or entry.get("dataset", "native-depth-train"),
+            )
+            if ds is None:
+                continue
+            train_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
         val_depth_parts: List[TorchDataset] = []
         for entry in paths.get("depth_val_caches", []):
             transform_fn = transform_map.get(entry.get("transform_key")) if transform_map else None
@@ -1610,6 +1847,14 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 dataset_name=entry.get("name") or _infer_dataset_name(entry["path"]),
                 local_cache_dir=local_cache_dir,
             )
+            val_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
+        for entry in paths.get("depth_val_native", []):
+            ds = _create_dataset_or_none(
+                lambda entry=entry: _build_native_depth_dataset(entry, config.img_size, config.max_depth),
+                entry.get("name") or entry.get("dataset", "native-depth-val"),
+            )
+            if ds is None:
+                continue
             val_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
 
         train_depth_parts = _apply_dataset_include(train_depth_parts, config.train_dataset_include, "depth-train")

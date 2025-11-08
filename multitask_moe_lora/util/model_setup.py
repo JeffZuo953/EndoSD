@@ -179,6 +179,18 @@ def create_and_setup_model(config: TrainingConfig, logger: logging.Logger) -> to
         lora_r=config.lora_r,
         lora_alpha=config.lora_alpha,
         camera_head_mode=getattr(config, "camera_head_mode", "none"),
+        endo_unid_params={
+            "shared_shards": config.endo_unid_shared_shards,
+            "shared_r": config.endo_unid_shared_r,
+            "shared_alpha": config.endo_unid_shared_alpha,
+            "depth_r": config.endo_unid_depth_r,
+            "depth_alpha": config.endo_unid_depth_alpha,
+            "seg_r": config.endo_unid_seg_r,
+            "seg_alpha": config.endo_unid_seg_alpha,
+            "camera_r": config.endo_unid_camera_r,
+            "camera_alpha": config.endo_unid_camera_alpha,
+            "dropout": config.endo_unid_dropout,
+        },
     )
     
     # 检查是否在分布式环境中

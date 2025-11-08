@@ -1,3 +1,4 @@
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,17 +10,20 @@ import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
+from .camera_utils import get_camera_info
 from .transform import NormalizeImage, PrepareForNet, Resize
 from .utils import compute_valid_mask
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class SequenceAssets:
     base_path: Path
-    image_dir: Path
-    depth_dir: Path
     sequence_name: str
-    intrinsics_path: Optional[Path]
+    image_dirs: Dict[str, Path]
+    depth_dirs: Dict[str, Path]
+    depth_by_image: Dict[str, Path]
 
 
 class HamlynDataset(Dataset):
@@ -54,6 +58,7 @@ class HamlynDataset(Dataset):
         mode: str = "train",
         size: Tuple[int, int] = (518, 518),
         max_depth: float = 0.3,
+        min_depth: float = 1e-3,
         intrinsics_cache_path: Optional[str] = None,
         cache_intrinsics: bool = True,
         image_ext: str = ".jpg",
@@ -64,6 +69,7 @@ class HamlynDataset(Dataset):
         self.mode: str = mode
         self.size: Tuple[int, int] = size
         self.max_depth: float = max_depth
+        self.min_depth: float = max(0.0, float(min_depth))
         self.cache_intrinsics: bool = cache_intrinsics
         self.image_ext: str = image_ext
         self.depth_ext: str = depth_ext
@@ -71,6 +77,7 @@ class HamlynDataset(Dataset):
         self._sequence_cache: Dict[str, SequenceAssets] = {}
         self._intrinsics_cache: Dict[str, torch.Tensor] = {}
         self._intrinsics_cache_dirty: bool = False
+        self._missing_intrinsics: set[str] = set()
 
         with open(filelist_path, "r") as f:
             self.filelist: List[str] = [line.strip() for line in f if line.strip()]
@@ -125,8 +132,7 @@ class HamlynDataset(Dataset):
             assets = self._get_sequence_assets(self.rootpath)
             base_path = assets.base_path.as_posix()
 
-        image_path = self._resolve_frame_path(assets.image_dir, frame_id, self.image_ext, description="image")
-        depth_path = self._resolve_frame_path(assets.depth_dir, frame_id, self.depth_ext, description="depth")
+        image_path, depth_path = self._resolve_frame_paths(assets, frame_id)
 
         raw_image = cv2.imread(image_path, cv2.IMREAD_COLOR)
         if raw_image is None:
@@ -134,17 +140,12 @@ class HamlynDataset(Dataset):
         image_rgb = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB)
         image = image_rgb.astype(np.float32) / 255.0
 
-        if depth_path.lower().endswith('.npy'):
-            depth = np.load(depth_path).astype(np.float32)
-        else:
-            depth_png = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
-            if depth_png is None:
-                raise FileNotFoundError(f"Unable to read depth map: {depth_path}")
-            if depth_png.dtype != np.uint16 and depth_png.dtype != np.uint32:
-                depth_png = depth_png.astype(np.uint16)
-            depth = depth_png.astype(np.float32) / self.depth_scale
-
-        depth = np.clip(depth, 0.0, self.max_depth)
+        depth = self._load_depth_array(depth_path)
+        depth = depth.astype(np.float32, copy=False)
+        invalid_depth = (~np.isfinite(depth)) | (depth < self.min_depth) | (depth > self.max_depth)
+        if invalid_depth.any():
+            depth = depth.copy()
+            depth[invalid_depth] = 0.0
 
         sample_dict = {
             "image": image,
@@ -156,6 +157,7 @@ class HamlynDataset(Dataset):
         valid_mask_tensor = compute_valid_mask(
             image_tensor,
             depth_tensor,
+            min_depth=self.min_depth,
             max_depth=self.max_depth,
             dataset_name="hamlyn",
         )
@@ -168,6 +170,7 @@ class HamlynDataset(Dataset):
             "valid_mask": valid_mask_tensor,
             "image_path": image_path,
             "max_depth": self.max_depth,
+            "min_depth": self.min_depth,
             "sequence": assets.sequence_name,
             "sequence_path": assets.base_path.as_posix(),
         }
@@ -178,6 +181,7 @@ class HamlynDataset(Dataset):
 
         result["depth_path"] = depth_path
         result["source_type"] = "hamlyn"
+        result["dataset_name"] = "hamlyn"
 
         return result
 
@@ -194,132 +198,247 @@ class HamlynDataset(Dataset):
             else:
                 base_path = resolved
 
-        image_dir = self._resolve_subdirectory(
-            base_path,
-            preferred=("color", "image"),
-            description="image directory"
-        )
-        depth_dir = self._resolve_subdirectory(
-            base_path,
-            preferred=("depth",),
-            description="depth directory"
-        )
+        image_dirs = self._discover_directory_mapping(base_path, preferred=("color", "image"))
+        depth_dirs = self._discover_directory_mapping(base_path, preferred=("depth",))
+        depth_by_image = self._build_depth_mapping(image_dirs, depth_dirs)
         sequence_name = base_path.name
-        intrinsics_path = self._resolve_intrinsics_path(base_path, sequence_name)
 
         assets = SequenceAssets(
             base_path=base_path,
-            image_dir=image_dir,
-            depth_dir=depth_dir,
             sequence_name=sequence_name,
-            intrinsics_path=intrinsics_path,
+            image_dirs=image_dirs,
+            depth_dirs=depth_dirs,
+            depth_by_image=depth_by_image,
         )
         self._sequence_cache[base_path_str] = assets
         return assets
 
-    def _resolve_subdirectory(
+    def _discover_directory_mapping(
         self,
         base_path: Path,
         preferred: Tuple[str, ...],
-        description: str,
-    ) -> Path:
+    ) -> Dict[str, Path]:
+        def _add(mapping: Dict[str, Path], key: str, path: Path) -> None:
+            key_norm = key.strip().lower()
+            if key_norm not in mapping:
+                mapping[key_norm] = path
+
+        mapping: Dict[str, Path] = {}
+
         for name in preferred:
             candidate = base_path / name
             if candidate.is_dir():
-                return candidate
+                _add(mapping, "", candidate)
+                _add(mapping, name, candidate)
 
-        candidates = [
-            child for child in base_path.iterdir()
-            if child.is_dir() and any(child.name.lower().startswith(name.lower()) for name in preferred)
-        ]
-        if candidates:
-            candidates.sort()
-            return candidates[0]
+        for child in sorted(base_path.iterdir(), key=lambda p: p.name.lower()):
+            if not child.is_dir():
+                continue
+            lower_name = child.name.lower()
+            for pref in preferred:
+                pref_lower = pref.lower()
+                if lower_name == pref_lower or lower_name.startswith(pref_lower):
+                    _add(mapping, lower_name, child)
+                    break
 
-        raise FileNotFoundError(f"Unable to locate {description} under {base_path}")
+        if not mapping:
+            raise FileNotFoundError(f"Unable to locate directories {preferred} under {base_path}")
 
-    def _resolve_frame_path(
+        if "" not in mapping:
+            first_path = next(iter(mapping.values()))
+            _add(mapping, "", first_path)
+
+        return mapping
+
+    def _build_depth_mapping(
         self,
-        directory: Path,
-        frame_id: str,
+        image_dirs: Dict[str, Path],
+        depth_dirs: Dict[str, Path],
+    ) -> Dict[str, Path]:
+        if not depth_dirs:
+            raise FileNotFoundError("Hamlyn depth directories are missing.")
+
+        default_depth = depth_dirs.get("")
+        if default_depth is None:
+            default_depth = next(iter(depth_dirs.values()))
+
+        mapping: Dict[str, Path] = {"": default_depth}
+
+        for key, _ in image_dirs.items():
+            if not key:
+                continue
+
+            candidates: List[Path] = []
+            lower_key = key.lower()
+
+            if lower_key in depth_dirs:
+                candidates.append(depth_dirs[lower_key])
+
+            suffix = ""
+            if lower_key.startswith("image"):
+                suffix = lower_key[len("image") :]
+            if suffix:
+                suffix_clean = suffix.lstrip("_")
+                candidate_keys = [
+                    suffix,
+                    suffix_clean,
+                    f"depth{suffix}",
+                    f"depth{suffix_clean}",
+                ]
+                digits = "".join(ch for ch in suffix if ch.isdigit())
+                if digits:
+                    candidate_keys.append(digits)
+                    candidate_keys.append(f"depth{digits}")
+            else:
+                digits = "".join(ch for ch in lower_key if ch.isdigit())
+                candidate_keys = [f"depth{digits}", digits] if digits else []
+
+            for candidate_key in candidate_keys:
+                if candidate_key and candidate_key.lower() in depth_dirs:
+                    candidates.append(depth_dirs[candidate_key.lower()])
+
+            selected = next((path for path in candidates if path is not None), default_depth)
+            mapping[lower_key] = selected
+
+        return mapping
+
+    def _split_frame_token(self, frame_id: str) -> Tuple[Optional[str], str]:
+        token = frame_id.replace("\\", "/").strip().strip("/")
+        if "/" in token:
+            parent, leaf = token.rsplit("/", 1)
+            parent = parent.strip("/")
+            hint = parent.lower() if parent else None
+            return hint, leaf
+        return None, token
+
+    @staticmethod
+    def _unique_paths(paths: List[Path]) -> List[Path]:
+        unique: List[Path] = []
+        seen: set[str] = set()
+        for path in paths:
+            key = str(path)
+            if key not in seen:
+                seen.add(key)
+                unique.append(path)
+        return unique
+
+    def _gather_image_directories(self, assets: SequenceAssets, subdir_hint: Optional[str]) -> List[Path]:
+        candidates: List[Path] = []
+        if subdir_hint:
+            path = assets.image_dirs.get(subdir_hint)
+            if path:
+                candidates.append(path)
+        default_dir = assets.image_dirs.get("")
+        if default_dir:
+            candidates.append(default_dir)
+        for key in sorted(assets.image_dirs.keys()):
+            path = assets.image_dirs[key]
+            if path not in candidates:
+                candidates.append(path)
+        return self._unique_paths(candidates)
+
+    def _gather_depth_directories(self, assets: SequenceAssets, subdir_hint: Optional[str]) -> List[Path]:
+        candidates: List[Path] = []
+        if subdir_hint:
+            mapped = assets.depth_by_image.get(subdir_hint)
+            if mapped:
+                candidates.append(mapped)
+            direct = assets.depth_dirs.get(subdir_hint)
+            if direct:
+                candidates.append(direct)
+        default_dir = assets.depth_by_image.get("") or assets.depth_dirs.get("")
+        if default_dir:
+            candidates.append(default_dir)
+        for key in sorted(assets.depth_dirs.keys()):
+            path = assets.depth_dirs[key]
+            if path not in candidates:
+                candidates.append(path)
+        return self._unique_paths(candidates)
+
+    def _resolve_media_path(
+        self,
+        directories: List[Path],
+        frame_name: str,
         ext: str,
         description: str,
+        frame_token: str,
+        sequence_name: str,
     ) -> str:
-        candidate = directory / f"{frame_id}{ext}"
-        if candidate.exists():
-            return candidate.as_posix()
-
-        matches = list(directory.glob(f"{frame_id}.*"))
-        if matches:
-            matches.sort()
-            return matches[0].as_posix()
-
-        raise FileNotFoundError(f"Hamlyn {description} file not found for frame {frame_id} in {directory}")
-
-    def _resolve_intrinsics_path(self, base_path: Path, sequence_name: str) -> Optional[Path]:
-        candidates: List[Path] = [
-            base_path / "intrinsics.txt",
-            base_path / "camera_intrinsics.txt",
-        ]
-
-        seq_digits = "".join(ch for ch in sequence_name if ch.isdigit())
-        if seq_digits:
-            calibration_root = Path(self.rootpath) / "calibration"
-            candidates.append(calibration_root / seq_digits / "intrinsics.txt")
-            candidates.append(calibration_root / seq_digits.lstrip("0") / "intrinsics.txt")
-
-        for candidate in candidates:
-            if candidate is None:
-                continue
-            candidate = candidate.expanduser().resolve()
+        for directory in directories:
+            candidate = directory / f"{frame_name}{ext}"
             if candidate.exists():
-                return candidate
-        return None
+                return candidate.as_posix()
+            matches = sorted(directory.glob(f"{frame_name}.*"))
+            if matches:
+                return matches[0].as_posix()
+        raise FileNotFoundError(
+            f"Hamlyn {description} file not found for frame '{frame_token}' in sequence '{sequence_name}'."
+        )
+
+    def _resolve_frame_paths(self, assets: SequenceAssets, frame_id: str) -> Tuple[str, str]:
+        subdir_hint, frame_name = self._split_frame_token(frame_id)
+        image_dirs = self._gather_image_directories(assets, subdir_hint)
+        depth_dirs = self._gather_depth_directories(assets, subdir_hint)
+        image_path = self._resolve_media_path(
+            image_dirs,
+            frame_name=frame_name,
+            ext=self.image_ext,
+            description="image",
+            frame_token=frame_id,
+            sequence_name=assets.sequence_name,
+        )
+        depth_path = self._resolve_media_path(
+            depth_dirs,
+            frame_name=frame_name,
+            ext=self.depth_ext,
+            description="depth",
+            frame_token=frame_id,
+            sequence_name=assets.sequence_name,
+        )
+        return image_path, depth_path
+
+    def _load_depth_array(self, depth_path: str) -> np.ndarray:
+        if depth_path.lower().endswith(".npy"):
+            array = np.load(depth_path)
+            if array.dtype != np.float32:
+                array = array.astype(np.float32)
+            return array
+
+        depth_png = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
+        if depth_png is None:
+            raise FileNotFoundError(f"Unable to read depth map: {depth_path}")
+        if depth_png.dtype in (np.float32, np.float64):
+            depth = depth_png.astype(np.float32, copy=False)
+        else:
+            depth = depth_png.astype(np.float32, copy=False) / self.depth_scale
+        return depth
 
     def _get_intrinsics_tensor(self, assets: SequenceAssets) -> Optional[torch.Tensor]:
-        seq_key = assets.sequence_name
+        seq_key = assets.sequence_name.lower()
         if not self.cache_intrinsics:
-            return self._read_intrinsics_file(assets.intrinsics_path)
+            camera_info = get_camera_info("hamlyn", str(assets.base_path))
+            if camera_info is None:
+                if seq_key not in self._missing_intrinsics:
+                    logger.error("[Hamlyn] Missing camera metadata for sequence '%s'; skipping intrinsics.", assets.sequence_name)
+                    self._missing_intrinsics.add(seq_key)
+                return None
+            return camera_info.intrinsics.clone().to(torch.float32)
 
         if seq_key in self._intrinsics_cache:
             return self._intrinsics_cache[seq_key]
 
-        intrinsics_tensor = self._read_intrinsics_file(assets.intrinsics_path)
-        if intrinsics_tensor is None:
+        camera_info = get_camera_info("hamlyn", str(assets.base_path))
+        if camera_info is None:
+            if seq_key not in self._missing_intrinsics:
+                logger.error("[Hamlyn] Missing camera metadata for sequence '%s'; skipping intrinsics.", assets.sequence_name)
+                self._missing_intrinsics.add(seq_key)
             return None
 
+        intrinsics_tensor = camera_info.intrinsics.clone().to(torch.float32)
         self._intrinsics_cache[seq_key] = intrinsics_tensor
         self._intrinsics_cache_dirty = True
         self._persist_intrinsics_cache()
         return intrinsics_tensor
-
-    def _read_intrinsics_file(self, path: Optional[Path]) -> Optional[torch.Tensor]:
-        if path is None or not path.exists():
-            return None
-
-        rows: List[List[float]] = []
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    values = [float(x) for x in line.replace(",", " ").split()]
-                    if values:
-                        rows.append(values)
-        except (OSError, ValueError):
-            return None
-
-        if len(rows) < 3:
-            return None
-
-        matrix = []
-        for row in rows[:3]:
-            if len(row) < 3:
-                return None
-            matrix.append(row[:3])
-
-        return torch.tensor(matrix, dtype=torch.float32)
 
     def _persist_intrinsics_cache(self) -> None:
         if not self.cache_intrinsics:

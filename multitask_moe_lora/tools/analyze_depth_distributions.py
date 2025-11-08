@@ -36,8 +36,8 @@ HIST_STEP = 0.02
 # Dataset -> filelist paths (train + val bundles from FM setup)
 DATASET_FILELISTS = {
     "SCARED": "/home/ziyi/ssde/data/LS/SCARED/cache/train_all_cache.txt",
-    "StereoMIS": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/all_cache.txt",
-    "EndoVis2017": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/all_cache.txt",
+    "StereoMIS": "/data/ziyi/multitask/data/LS/StereoMIS/cache/cache_pt/all_cache.txt",
+    "EndoVis2017": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/all_cache.txt",
     "EndoVis2018_train": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
     "EndoVis2018_val": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
     "C3VDv2": "/data/ziyi/multitask/data/NO/c3vdv2/cache/cache.txt",

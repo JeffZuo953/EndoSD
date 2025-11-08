@@ -1,12 +1,17 @@
+import logging
 import os
+from typing import Callable, List, Optional, Set
+
 import torch
+from PIL import Image
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from typing import List, Callable, Optional
 
-from .camera_utils import get_camera_info
+from .camera_utils import get_camera_info, normalize_intrinsics
 from .utils import compute_valid_mask, map_ls_semseg_to_10_classes, map_semseg_to_three_classes
 from ..util.local_cache import LocalCacheManager
+
+logger = logging.getLogger(__name__)
 
 
 def generate_dataset_cache(dataset: Dataset, output_dir: str, filelist_name: str = "cache_files.txt", origin_prefix: str = "", cache_root_path: str = "") -> str:
@@ -143,6 +148,7 @@ class DepthCacheDataset(Dataset):
         self.dataset_type = dataset_type
         self.dataset_name = dataset_name or _infer_dataset_name_from_path(filelist_path)
         self._local_cache = LocalCacheManager(local_cache_dir, namespace=f"depth_cache/{self.dataset_name}")
+        self._missing_camera_datasets: Set[str] = set()
 
     def __getitem__(self, item: int) -> dict:
         """
@@ -179,8 +185,33 @@ class DepthCacheDataset(Dataset):
         cached_data['source_type'] = self.dataset_type  # 添加数据源类型标识
         cached_data['dataset_name'] = self.dataset_name
 
-        if 'image' in cached_data and torch.is_tensor(cached_data['image']):
-            cached_data['image'] = cached_data['image'].to(torch.float32)
+        img_tensor = cached_data.get('image')
+        if torch.is_tensor(img_tensor):
+            cached_data['image'] = img_tensor.to(torch.float32)
+            img_h, img_w = int(img_tensor.shape[-2]), int(img_tensor.shape[-1])
+        else:
+            img_h = img_w = None
+
+        if 'semseg_mask' in cached_data:
+            semseg_mask = cached_data['semseg_mask']
+            if torch.is_tensor(semseg_mask):
+                cached_data['semseg_mask'] = semseg_mask.to(torch.long)
+            else:
+                cached_data['semseg_mask'] = torch.as_tensor(semseg_mask, dtype=torch.long)
+
+        if 'seg_valid_mask' in cached_data:
+            seg_valid = cached_data['seg_valid_mask']
+            if torch.is_tensor(seg_valid):
+                cached_data['seg_valid_mask'] = seg_valid.to(torch.bool)
+            else:
+                cached_data['seg_valid_mask'] = torch.as_tensor(seg_valid, dtype=torch.bool)
+
+        img_tensor = cached_data.get('image')
+        if torch.is_tensor(img_tensor):
+            cached_data['image'] = img_tensor.to(torch.float32)
+            img_h, img_w = int(img_tensor.shape[-2]), int(img_tensor.shape[-1])
+        else:
+            img_h = img_w = None
 
         if 'semseg_mask' in cached_data:
             semseg_mask = cached_data['semseg_mask']
@@ -247,16 +278,56 @@ class DepthCacheDataset(Dataset):
             cached_data['valid_mask'] = valid_mask
             cached_data['depth_valid_mask'] = depth_valid
 
+        # --- Camera intrinsics metadata ---
+        intrinsic_tensor: Optional[torch.Tensor] = None
+        base_width: Optional[float] = None
+        base_height: Optional[float] = None
+
+        existing_intrinsics = cached_data.get('camera_intrinsics')
+        if existing_intrinsics is not None:
+            if torch.is_tensor(existing_intrinsics):
+                intrinsic_tensor = existing_intrinsics.to(torch.float32)
+            else:
+                intrinsic_tensor = torch.as_tensor(existing_intrinsics, dtype=torch.float32)
+            cached_data['camera_intrinsics'] = intrinsic_tensor
+
+        size_value = cached_data.get('camera_size')
+        if size_value is not None:
+            if torch.is_tensor(size_value):
+                base_width = float(size_value[0].item())
+                base_height = float(size_value[1].item())
+            elif isinstance(size_value, (list, tuple)) and len(size_value) >= 2:
+                base_width = float(size_value[0])
+                base_height = float(size_value[1])
+
         camera_info = get_camera_info(self.dataset_name or "", original_image_path)
         if camera_info is None:
-            camera_info = get_camera_info(self.dataset_type or "", original_image_path)
-        if camera_info is not None:
-            cached_data['camera_intrinsics'] = camera_info.intrinsics.clone()
-            cached_data['camera_intrinsics_norm'] = camera_info.intrinsics_norm.clone()
-            cached_data['camera_size'] = torch.tensor(
-                [camera_info.width, camera_info.height],
-                dtype=torch.float32,
-            )
+            dataset_key = self.dataset_name or "unknown"
+            if dataset_key not in self._missing_camera_datasets:
+                logger.error(
+                    "[DepthCacheDataset] Missing camera metadata for dataset '%s'; skipping camera intrinsics for %s.",
+                    dataset_key,
+                    original_image_path,
+                )
+                self._missing_camera_datasets.add(dataset_key)
+        else:
+            intrinsic_tensor = camera_info.intrinsics.clone().to(torch.float32)
+            base_width = float(camera_info.width)
+            base_height = float(camera_info.height)
+            cached_data['camera_intrinsics'] = intrinsic_tensor
+
+        if base_width is not None and base_height is not None:
+            size_tensor = torch.tensor([base_width, base_height], dtype=torch.float32)
+            cached_data['camera_size'] = size_tensor
+            cached_data['camera_size_original'] = size_tensor.clone()
+            cached_data['camera_original_image_size'] = size_tensor.clone()
+
+        if img_h is not None and img_w is not None:
+            cached_data['camera_image_size'] = torch.tensor([float(img_w), float(img_h)], dtype=torch.float32)
+
+        if intrinsic_tensor is not None and base_width is not None and base_height is not None:
+            norm = normalize_intrinsics(intrinsic_tensor, base_width, base_height)
+            cached_data['camera_intrinsics_norm'] = norm
 
         return cached_data
 

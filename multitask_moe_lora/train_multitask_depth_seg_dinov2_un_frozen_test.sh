@@ -53,7 +53,8 @@ SEG_LOSS_WEIGHT=1.0 # For 'fixed' strategy
 DWA_TEMPERATURE=2.0   # For 'dwa' strategy
 
 # Data Path Configuration
-BASE_DATA_PATH="/media/ExtHDD1/jianfu/data"
+BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
+HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
 
 # Pretrained Weights Path
 # PRETRAINED_WEIGHTS="${BASE_DATA_PATH}/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"

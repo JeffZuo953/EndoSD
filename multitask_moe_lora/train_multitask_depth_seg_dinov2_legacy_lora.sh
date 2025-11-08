@@ -52,7 +52,8 @@ SEG_LOSS_WEIGHT=1.0
 DWA_TEMPERATURE=2.0
 
 # Data paths
-BASE_DATA_PATH="/data/ziyi/multitask"
+BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
+HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
 # PRETRAINED_WEIGHTS="${BASE_DATA_PATH}/pretained/dav2-f.pth"
 PRETRAINED_WEIGHTS="${BASE_DATA_PATH}/pretained/train_4_dataset__same_maxdepth_full_20250613_210808__latest.pth"
 RESUME_CHECKPOINT=""

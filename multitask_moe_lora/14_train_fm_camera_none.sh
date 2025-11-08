@@ -36,6 +36,7 @@ FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"none"}
 CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.0}
 CAMERA_LR=${CAMERA_LR:-1e-3}
+TOLERATE_VALIDATION_ERRORS=${TOLERATE_VALIDATION_ERRORS:-true}
 
 FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
 FM_SAMPLE_SIZE=${FM_SAMPLE_SIZE:-10}
@@ -53,8 +54,8 @@ DATASET_MODALITY=${DATASET_MODALITY:-"fd"}       # depth-only foundation mode
 PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET}
 
-TRAIN_DATASET_INCLUDE="SCARED,StereoMIS,dVPN,C3VDv2,SimCol,Kidney3D,EndoSynth"
-VAL_DATASET_INCLUDE="hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D"
+TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2018,dVPN,C3VDv2,SimCol,Kidney3D"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper"}
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
@@ -183,6 +184,9 @@ if [[ "${MIXED_PRECISION}" == "true" ]]; then
 fi
 if [[ "${FROZEN_BACKBONE}" == "true" ]]; then
     BASE_CMD+=(--frozen-backbone)
+fi
+if [[ "${TOLERATE_VALIDATION_ERRORS}" == "true" ]]; then
+    BASE_CMD+=(--tolerate-validation-errors)
 fi
 if [[ -n "${PRETRAINED_WEIGHTS}" ]]; then
     BASE_CMD+=(--resume-from "${PRETRAINED_WEIGHTS}")

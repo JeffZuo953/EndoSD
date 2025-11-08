@@ -1,6 +1,6 @@
 {
   "jobs": {
-    "stereomis_train": {
+    "stereomis_sa_train": {
       "dataset": "stereo_mis",
       "params": {
         "root_dir": "/home/ziyi/ssde/000/abdo/StereoMIS_SA",
@@ -20,7 +20,7 @@
       "num_workers": 32,
       "enable_depth_stats": false
     },
-    "stereomis_val": {
+    "stereomis_sa_val": {
       "dataset": "stereo_mis",
       "params": {
         "root_dir": "/home/ziyi/ssde/000/abdo/StereoMIS_SA",
@@ -40,10 +40,197 @@
       "num_workers": 32,
       "enable_depth_stats": false
     },
+    "stereomis_ls_part01": {
+      "dataset": "stereo_mis",
+      "params": {
+        "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
+        "split": "all",
+        "size": [
+          518,
+          518
+        ],
+        "max_depth": 0.3,
+        "disparity_scale": 256.0,
+        "sequences": [
+          "P1"
+        ]
+      },
+      "origin_prefix": "/data/ziyi/multitask/data/LS/StereoMIS",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part01/cache_pt",
+      "output_dir": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part01",
+      "filelist_name": "part01.txt",
+      "batch_size": 4,
+      "num_workers": 32,
+      "enable_depth_stats": false
+    },
+    "stereomis_ls_part02": {
+      "dataset": "stereo_mis",
+      "params": {
+        "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
+        "split": "all",
+        "size": [
+          518,
+          518
+        ],
+        "max_depth": 0.3,
+        "disparity_scale": 256.0,
+        "sequences": [
+          "P2_8"
+        ]
+      },
+      "origin_prefix": "/data/ziyi/multitask/data/LS/StereoMIS",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part02/cache_pt",
+      "output_dir": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part02",
+      "filelist_name": "part02.txt",
+      "batch_size": 4,
+      "num_workers": 32,
+      "enable_depth_stats": false
+    },
+    "stereomis_ls_part03": {
+      "dataset": "stereo_mis",
+      "params": {
+        "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
+        "split": "all",
+        "size": [
+          518,
+          518
+        ],
+        "max_depth": 0.3,
+        "disparity_scale": 256.0,
+        "sequences": [
+          "P3"
+        ]
+      },
+      "origin_prefix": "/data/ziyi/multitask/data/LS/StereoMIS",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part03/cache_pt",
+      "output_dir": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part03",
+      "filelist_name": "part03.txt",
+      "batch_size": 4,
+      "num_workers": 32,
+      "enable_depth_stats": false
+    },
+    "stereomis_ls_part04": {
+      "dataset": "stereo_mis",
+      "params": {
+        "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
+        "split": "all",
+        "size": [
+          518,
+          518
+        ],
+        "max_depth": 0.3,
+        "disparity_scale": 256.0,
+        "sequences": [
+          "P2_0",
+          "P2_1"
+        ]
+      },
+      "origin_prefix": "/data/ziyi/multitask/data/LS/StereoMIS",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part04/cache_pt",
+      "output_dir": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part04",
+      "filelist_name": "part04.txt",
+      "batch_size": 4,
+      "num_workers": 32,
+      "enable_depth_stats": false
+    },
+    "stereomis_ls_part05": {
+      "dataset": "stereo_mis",
+      "params": {
+        "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
+        "split": "all",
+        "size": [
+          518,
+          518
+        ],
+        "max_depth": 0.3,
+        "disparity_scale": 256.0,
+        "sequences": [
+          "P2_2",
+          "P2_3"
+        ]
+      },
+      "origin_prefix": "/data/ziyi/multitask/data/LS/StereoMIS",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part05/cache_pt",
+      "output_dir": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part05",
+      "filelist_name": "part05.txt",
+      "batch_size": 4,
+      "num_workers": 32,
+      "enable_depth_stats": false
+    },
+    "stereomis_ls_part06": {
+      "dataset": "stereo_mis",
+      "params": {
+        "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
+        "split": "all",
+        "size": [
+          518,
+          518
+        ],
+        "max_depth": 0.3,
+        "disparity_scale": 256.0,
+        "sequences": [
+          "P2_4",
+          "P2_5"
+        ]
+      },
+      "origin_prefix": "/data/ziyi/multitask/data/LS/StereoMIS",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part06/cache_pt",
+      "output_dir": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part06",
+      "filelist_name": "part06.txt",
+      "batch_size": 4,
+      "num_workers": 32,
+      "enable_depth_stats": false
+    },
+    "stereomis_ls_part07": {
+      "dataset": "stereo_mis",
+      "params": {
+        "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
+        "split": "all",
+        "size": [
+          518,
+          518
+        ],
+        "max_depth": 0.3,
+        "disparity_scale": 256.0,
+        "sequences": [
+          "P2_6"
+        ]
+      },
+      "origin_prefix": "/data/ziyi/multitask/data/LS/StereoMIS",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part07/cache_pt",
+      "output_dir": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part07",
+      "filelist_name": "part07.txt",
+      "batch_size": 4,
+      "num_workers": 32,
+      "enable_depth_stats": false
+    },
+    "stereomis_ls_part08": {
+      "dataset": "stereo_mis",
+      "params": {
+        "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
+        "split": "all",
+        "size": [
+          518,
+          518
+        ],
+        "max_depth": 0.3,
+        "disparity_scale": 256.0,
+        "sequences": [
+          "P2_7"
+        ]
+      },
+      "origin_prefix": "/data/ziyi/multitask/data/LS/StereoMIS",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part08/cache_pt",
+      "output_dir": "/data/ziyi/multitask/data/LS/StereoMIS/cache/part08",
+      "filelist_name": "part08.txt",
+      "batch_size": 4,
+      "num_workers": 32,
+      "enable_depth_stats": false
+    },
     "endovis2017_train": {
       "dataset": "endovis2017",
       "params": {
-        "root_dir": "/data/ziyi/multitask/data/LS/EndoVis2017",
+        "root_dir": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth",
         "split": "train",
         "size": [
           518,
@@ -52,9 +239,9 @@
         "max_depth": 0.3,
         "min_depth": 0.001
       },
-      "origin_prefix": "/data/ziyi/multitask/data/LS/EndoVis2017",
-      "cache_root_path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/train",
-      "output_dir": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt",
+      "origin_prefix": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/train",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train",
+      "output_dir": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache",
       "filelist_name": "train_cache.txt",
       "batch_size": 4,
       "num_workers": 8
@@ -62,7 +249,7 @@
     "endovis2017_val": {
       "dataset": "endovis2017",
       "params": {
-        "root_dir": "/data/ziyi/multitask/data/LS/EndoVis2017",
+        "root_dir": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth",
         "split": "val",
         "size": [
           518,
@@ -71,10 +258,10 @@
         "max_depth": 0.3,
         "min_depth": 0.001
       },
-      "origin_prefix": "/data/ziyi/multitask/data/LS/EndoVis2017",
-      "cache_root_path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/val",
-      "output_dir": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt",
-      "filelist_name": "val_cache.txt",
+      "origin_prefix": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/test",
+      "cache_root_path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval",
+      "output_dir": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache",
+      "filelist_name": "eval_cache.txt",
       "batch_size": 4,
       "num_workers": 8
     },
@@ -271,22 +458,23 @@
     "hamlyn_train": {
       "dataset": "hamlyn",
       "params": {
-        "filelist_path": "/data/ziyi/multitask/data/LS/hamlyn/filelists/train.txt",
-        "rootpath": "/data/ziyi/multitask/data/LS/hamlyn",
+        "filelist_path": "/home/ziyi/ssde/000/abdo/hamlyn_data/filelists/train.txt",
+        "rootpath": "/home/ziyi/ssde/000/abdo/hamlyn_data",
         "mode": "train",
         "size": [
           518,
           518
         ],
         "max_depth": 0.3,
-        "depth_scale": 1000.0
+        "depth_scale": 1000.0,
+        "min_depth": 0.001
       },
-      "origin_prefix": "/data/ziyi/multitask/data/LS/hamlyn",
+      "origin_prefix": "/home/ziyi/ssde/000/abdo/hamlyn_data",
       "cache_root_path": "/data/ziyi/multitask/data/LS/hamlyn/cache_pt/train",
       "output_dir": "/data/ziyi/multitask/data/LS/hamlyn/cache_pt",
       "filelist_name": "train_cache.txt",
       "batch_size": 4,
-      "num_workers": 8
+      "num_workers": 16
     },
     "dvpn_train": {
       "dataset": "dvpn",
@@ -326,90 +514,6 @@
       "batch_size": 8,
       "num_workers": 16,
       "pin_memory": true
-    },
-    "stereomis_all_v2": {
-      "dataset": "stereo_mis",
-      "params": {
-        "root_dir": "/home/ziyi/ssde/000/abdo/StereoMIS_SA",
-        "split": "all",
-        "size": [
-          518,
-          518
-        ],
-        "max_depth": 0.3,
-        "disparity_scale": 256.0
-      },
-      "origin_prefix": "/home/ziyi/ssde/000/abdo/StereoMIS_SA",
-      "cache_root_path": "/home/ziyi/ssde/000/abdo/StereoMIS_SA/cache_pt/all",
-      "output_dir": "/home/ziyi/ssde/000/abdo/StereoMIS_SA/cache_pt",
-      "filelist_name": "all_cache.txt",
-      "batch_size": 8,
-      "num_workers": 16,
-      "pin_memory": true
-    },
-    "endomapper_train": {
-      "dataset": "endomapper",
-      "params": {
-        "filelist_path": "/data/ziyi/multitask/data/NO/endomapper_sim/filelists/train_all.txt",
-        "mode": "train",
-        "size": [
-          518,
-          518
-        ],
-        "max_depth": 0.2
-      },
-      "origin_prefix": "/data/ziyi/multitask/data/NO/endomapper_sim",
-      "cache_root_path": "/data/ziyi/multitask/data/NO/endomapper_sim/cache/train_all",
-      "output_dir": "/data/ziyi/multitask/data/NO/endomapper_sim/cache",
-      "filelist_name": "train_all_cache.txt",
-      "batch_size": 8,
-      "num_workers": 8
-    },
-    "hamlyn_all": {
-      "dataset": "hamlyn",
-      "params": {
-        "filelist_path": "/data/ziyi/multitask/data/LS/hamlyn/filelists/train.txt",
-        "rootpath": "/data/ziyi/multitask/data/LS/hamlyn",
-        "mode": "train",
-        "size": [
-          518,
-          518
-        ],
-        "max_depth": 0.3,
-        "depth_scale": 1000.0
-      },
-      "origin_prefix": "/data/ziyi/multitask/data/LS/hamlyn",
-      "cache_root_path": "/data/ziyi/multitask/data/LS/hamlyn/cache_pt/all",
-      "output_dir": "/data/ziyi/multitask/data/LS/hamlyn/cache_pt",
-      "filelist_name": "all_cache.txt",
-      "batch_size": 4,
-      "num_workers": 8
-    },
-    "hamlyn_all_full": {
-      "dataset": "hamlyn",
-      "params": {
-        "filelist_path": "/data/ziyi/multitask/data/LS/hamlyn/filelists/all.txt",
-        "rootpath": "/data/ziyi/multitask/data/LS/hamlyn",
-        "mode": "train",
-        "size": [
-          518,
-          518
-        ],
-        "max_depth": 0.3,
-        "depth_scale": 1000.0,
-        "cache_intrinsics": true
-      },
-      "origin_prefix": "/data/ziyi/multitask/data/LS/hamlyn",
-      "cache_root_path": "/data/ziyi/multitask/data/LS/hamlyn/cache_pt/all",
-      "output_dir": "/data/ziyi/multitask/data/LS/hamlyn/cache_pt",
-      "filelist_name": "all_cache.txt",
-      "batch_size": 4,
-      "num_workers": 8,
-      "enable_depth_stats": false,
-      "store_intrinsics_per_sample": false,
-      "intrinsics_map_name": "intrinsics_map.pt",
-      "depth_histogram_mm_max": 300,
-      "depth_histogram_csv_name": "depth_histogram_mm.csv"
     }
   }
 }
