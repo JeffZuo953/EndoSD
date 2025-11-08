@@ -379,6 +379,7 @@ DATASET_MODALITY_RULES: Dict[str, Dict[str, Dict[str, Set[str]]]] = {
                 "dVPN",
                 "EndoVis2017",
                 "EndoVis2018",
+                "EndoSynth",
                 "C3VDv2",
                 "SimCol",
                 "Kidney3D",
@@ -388,6 +389,7 @@ DATASET_MODALITY_RULES: Dict[str, Dict[str, Dict[str, Set[str]]]] = {
                 "EndoNeRF",
                 "C3VD",
                 "EndoMapper",
+                "EndoSynth",
             },
             "seg": None,
             "seg_val": None,
@@ -636,6 +638,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
     active_transform = config.path_transform_name
 
     modality = getattr(config, "dataset_modality", "mt").lower()
+    local_cache_dir = getattr(config, "local_cache_dir", None)
     dataset_domain = _detect_domain_from_config(active_dataset)
     modality_rule = DATASET_MODALITY_RULES.get(dataset_domain, {}).get(modality)
 
@@ -1270,6 +1273,11 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "EndoVis2018",
                 },
                 {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth",
+                },
+                {
                     "path": "/data/ziyi/multitask/data/NO/c3vdv2/cache/cache.txt",
                     "dataset_type": "NO",
                     "name": "C3VDv2",
@@ -1301,6 +1309,11 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoNeRF",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/NO/c3vd/cache/all_cache.txt",
@@ -1550,7 +1563,8 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     entry["path"],
                     dataset_type=entry.get("dataset_type", "unknown"),
                     path_transform=transform_fn,
-                    dataset_name=entry.get("name") or _infer_dataset_name(entry["path"])
+                    dataset_name=entry.get("name") or _infer_dataset_name(entry["path"]),
+                    local_cache_dir=local_cache_dir,
                 ),
                 entry.get("name") or entry["path"],
             )
@@ -1565,7 +1579,8 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 default_max_depth=entry.get("max_depth", config.max_depth),
                 default_depth_scale=entry.get("depth_scale", 1000.0),
                 dataset_type=entry.get("dataset_type", "unknown"),
-                dataset_name=entry.get("name") or _infer_dataset_name(entry["path"])
+                dataset_name=entry.get("name") or _infer_dataset_name(entry["path"]),
+                local_cache_dir=local_cache_dir,
             )
             train_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
         val_depth_parts: List[TorchDataset] = []
@@ -1576,7 +1591,8 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     entry["path"],
                     dataset_type=entry.get("dataset_type", "unknown"),
                     path_transform=transform_fn,
-                    dataset_name=entry.get("name") or _infer_dataset_name(entry["path"])
+                    dataset_name=entry.get("name") or _infer_dataset_name(entry["path"]),
+                    local_cache_dir=local_cache_dir,
                 ),
                 entry.get("name") or entry["path"],
             )
@@ -1591,7 +1607,8 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 default_max_depth=entry.get("max_depth", config.max_depth),
                 default_depth_scale=entry.get("depth_scale", 1000.0),
                 dataset_type=entry.get("dataset_type", "unknown"),
-                dataset_name=entry.get("name") or _infer_dataset_name(entry["path"])
+                dataset_name=entry.get("name") or _infer_dataset_name(entry["path"]),
+                local_cache_dir=local_cache_dir,
             )
             val_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
 
@@ -1614,6 +1631,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 dataset_type="kidney",
                 path_transform=transform_map.get("depth_train_inhouse"),
                 dataset_name=_infer_dataset_name(paths["depth_train_inhouse"]),
+                local_cache_dir=local_cache_dir,
             ),
             "depth_train_inhouse",
         )
@@ -1625,6 +1643,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 dataset_type="colon",
                 path_transform=transform_map.get("depth_train_endomapper"),
                 dataset_name=_infer_dataset_name(paths["depth_train_endomapper"]),
+                local_cache_dir=local_cache_dir,
             ),
             "depth_train_endomapper",
         )
@@ -1642,6 +1661,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 dataset_type="kidney",
                 path_transform=transform_map.get("depth_val_inhouse"),
                 dataset_name=_infer_dataset_name(paths["depth_val_inhouse"]),
+                local_cache_dir=local_cache_dir,
             ),
             "depth_val_inhouse",
         )
@@ -1653,6 +1673,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 dataset_type="colon",
                 path_transform=transform_map.get("depth_val_endomapper"),
                 dataset_name=_infer_dataset_name(paths["depth_val_endomapper"]),
+                local_cache_dir=local_cache_dir,
             ),
             "depth_val_endomapper",
         )
@@ -1683,6 +1704,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     path_transform=transform_fn,
                     dataset_name=entry.get("name") or _infer_dataset_name(entry["path"]),
                     label_mode=seg_label_mode,
+                    local_cache_dir=local_cache_dir,
                 ),
                 entry.get("name") or entry["path"],
             )
@@ -1698,7 +1720,8 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 default_max_depth=entry.get("max_depth", config.max_depth),
                 default_depth_scale=entry.get("depth_scale", 1000.0),
                 dataset_type=entry.get("dataset_type", "unknown"),
-                dataset_name=entry.get("name") or _infer_dataset_name(entry["path"])
+                dataset_name=entry.get("name") or _infer_dataset_name(entry["path"]),
+                local_cache_dir=local_cache_dir,
             )
             train_seg_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
         train_seg_parts = _apply_dataset_include(train_seg_parts, config.train_dataset_include, "seg-train")
@@ -1713,6 +1736,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     path_transform=transform_fn,
                     dataset_name=entry.get("name") or _infer_dataset_name(entry["path"]),
                     label_mode=seg_label_mode,
+                    local_cache_dir=local_cache_dir,
                 ),
                 entry.get("name") or entry["path"],
             )
@@ -1728,7 +1752,8 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 default_max_depth=entry.get("max_depth", config.max_depth),
                 default_depth_scale=entry.get("depth_scale", 1000.0),
                 dataset_type=entry.get("dataset_type", "unknown"),
-                dataset_name=entry.get("name") or _infer_dataset_name(entry["path"])
+                dataset_name=entry.get("name") or _infer_dataset_name(entry["path"]),
+                local_cache_dir=local_cache_dir,
             )
             val_seg_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
         if modality_rule:
@@ -1755,6 +1780,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     path_transform=transform_map.get(key),
                     dataset_name=_infer_dataset_name(paths[key]),
                     label_mode=seg_label_mode,
+                    local_cache_dir=local_cache_dir,
                 ),
                 key,
             )
@@ -1778,6 +1804,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     path_transform=transform_map.get(key),
                     dataset_name=_infer_dataset_name(paths[key]),
                     label_mode=seg_label_mode,
+                    local_cache_dir=local_cache_dir,
                 ),
                 key,
             )

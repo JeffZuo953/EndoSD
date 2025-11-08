@@ -5,6 +5,7 @@
 """
 
 import argparse
+import os
 from dataclasses import dataclass
 from typing import Optional, List
 
@@ -67,6 +68,7 @@ class TrainingConfig:
     dataset_modality: str = "mt"
     train_dataset_include: Optional[List[str]] = None
     val_dataset_include: Optional[List[str]] = None
+    local_cache_dir: Optional[str] = None
 
     # Demo / visualization outputs
     demo_output_root: Optional[str] = None
@@ -169,6 +171,10 @@ def create_parser() -> argparse.ArgumentParser:
                         type=str,
                         default=None,
                         help="Comma-separated dataset names to keep in validation.")
+    parser.add_argument("--local-cache-dir",
+                        type=str,
+                        default=os.environ.get("LOCAL_CACHE_DIR") or os.environ.get("LOCAL_CACHE_PATH"),
+                        help="Optional directory for local .pt cache mirroring.")
 
     # 其他参数
     parser.add_argument("--resume-from", type=str, required=False, help="Path to checkpoint to resume training from or load pretrained weights")
@@ -255,6 +261,7 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           dataset_modality=getattr(args, 'dataset_modality', 'mt'),
                           train_dataset_include=train_include_list,
                           val_dataset_include=val_include_list,
+                          local_cache_dir=getattr(args, 'local_cache_dir', None),
                           demo_output_root=getattr(args, 'demo_output_root', None),
                           resume_from=getattr(args, 'resume_from', ""),
                           resume_full_state=getattr(args, 'resume_full_state', False),

@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -10,6 +10,7 @@ from torchvision.transforms import Compose
 
 from .transform import NormalizeImage, PrepareForNet, Resize
 from .utils import compute_valid_mask
+from ..util.local_cache import LocalCacheManager
 
 
 @dataclass
@@ -56,6 +57,7 @@ class FileListSegDepthDataset(Dataset):
         default_min_depth: float = 0.0,
         dataset_type: str = "unknown",
         dataset_name: Optional[str] = None,
+        local_cache_dir: Optional[str] = None,
     ) -> None:
         self.mode: str = mode
         self.size: Tuple[int, int] = size
@@ -75,6 +77,8 @@ class FileListSegDepthDataset(Dataset):
 
         self.samples: List[SampleSpec] = [self._parse_line(line) for line in raw_lines]
         self.dataset_name: str = dataset_name or self._infer_dataset_name(filelist_path)
+        self._local_cache = LocalCacheManager(local_cache_dir, namespace=f"filelist/{self.dataset_name}")
+        self._cache_prefix = f"v1|{self.dataset_name}|{self.mode}|{self.size[0]}x{self.size[1]}|{self.default_max_depth}|{self.default_depth_scale}|{self.default_min_depth}|{self.dataset_type}"
 
         net_w, net_h = size
         self.transform = Compose([
@@ -135,11 +139,51 @@ class FileListSegDepthDataset(Dataset):
             meta=meta,
         )
 
+    def _make_cache_key(self, sample: SampleSpec) -> str:
+        return "|".join([
+            self._cache_prefix,
+            sample.image_path,
+            sample.depth_path,
+            sample.mask_path,
+            f"max={sample.max_depth}",
+            f"scale={sample.depth_scale}",
+            f"min={sample.min_depth}",
+        ])
+
+    def _prepare_cache_payload(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {}
+        for key, value in data.items():
+            if torch.is_tensor(value):
+                payload[key] = value.detach().cpu()
+            else:
+                payload[key] = value
+        return payload
+
+    def _postprocess_cached_sample(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if "image" in data and torch.is_tensor(data["image"]):
+            data["image"] = data["image"].to(torch.float32)
+        if "depth" in data and torch.is_tensor(data["depth"]):
+            data["depth"] = data["depth"].to(torch.float32)
+        if "semseg_mask" in data and torch.is_tensor(data["semseg_mask"]):
+            data["semseg_mask"] = data["semseg_mask"].to(torch.long)
+        if "valid_mask" in data and torch.is_tensor(data["valid_mask"]):
+            data["valid_mask"] = data["valid_mask"].to(torch.bool)
+        data.setdefault("dataset_name", self.dataset_name)
+        data.setdefault("source_type", data.get("source_type", self.dataset_type))
+        return data
+
     def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, index: int) -> Dict[str, torch.Tensor | str]:
         sample = self.samples[index]
+
+        cache_key: Optional[str] = None
+        if self._local_cache.enabled:
+            cache_key = self._make_cache_key(sample)
+            cached = self._local_cache.load_obj(cache_key)
+            if cached is not None:
+                return self._postprocess_cached_sample(cached)
 
         image = self._read_image(sample.image_path)
         depth = self._read_depth(sample.depth_path, sample)
@@ -177,6 +221,9 @@ class FileListSegDepthDataset(Dataset):
             "source_type": sample.meta.get("source_type", sample.meta.get("dataset_type", self.dataset_type)),
             "dataset_name": self.dataset_name,
         }
+
+        if cache_key and self._local_cache.enabled:
+            self._local_cache.save_obj(cache_key, self._prepare_cache_payload(result))
         return result
 
     def _read_image(self, path: str) -> np.ndarray:

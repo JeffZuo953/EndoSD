@@ -29,7 +29,7 @@ LEARNING_RATE=5e-6
 WEIGHT_DECAY=0.01
 IMG_SIZE=518
 MAX_DEPTH=0.3
-MIN_DEPTH=1e-8
+MIN_DEPTH=1e-6
 MIXED_PRECISION=true
 FROZEN_BACKBONE=false
 CAMERA_HEAD_MODE="vggtlike"
@@ -52,8 +52,8 @@ DATASET_MODALITY="fd"       # depth-only foundation mode
 PATH_TRANSFORM_NAME="none"
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET}
 
-TRAIN_DATASET_INCLUDE="SCARED,StereoMIS,dVPN,C3VDv2,SimCol,Kidney3D"
-VAL_DATASET_INCLUDE="EndoNeRF,C3VD,EndoMapper"
+TRAIN_DATASET_INCLUDE="SCARED,StereoMIS,dVPN,C3VDv2,SimCol,Kidney3D,EndoSynth"
+VAL_DATASET_INCLUDE="hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D"
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration

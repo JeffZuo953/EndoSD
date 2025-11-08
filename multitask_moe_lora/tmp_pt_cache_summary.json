@@ -1,0 +1,698 @@
+[
+  {
+    "dataset": "SCARED",
+    "list_path": "/home/ziyi/ssde/data/LS/SCARED/cache/train_all_cache.txt",
+    "list_exists": true,
+    "sample_path": "/data/ziyi/multitask/data/LS/SCARED/cache/train/dataset_1/keyframe_1/data/left_rectified/000000.pt",
+    "sample_exists": true,
+    "size_bytes": 2361203,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          414,
+          518
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.bool"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "StereoMIS",
+    "list_path": "/data/ziyi/multitask/data/LS/StereoMIS/cache/cache_pt/all_cache.txt",
+    "list_exists": false,
+    "sample_path": null,
+    "sample_exists": false,
+    "size_bytes": null,
+    "tensor_summaries": [],
+    "error": "cache list not found"
+  },
+  {
+    "dataset": "EndoVis2017",
+    "list_path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/all_cache.txt",
+    "list_exists": true,
+    "sample_path": "/data/ziyi/multitask/data/LS/EndoVis2017/cache_pt/train/image/instrument_1_4_training/instrument_dataset_1/left_frames/frame000.pt",
+    "sample_exists": true,
+    "size_bytes": 1811940,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          291,
+          518
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          291,
+          518
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          291,
+          518
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "semseg_mask",
+        "shape": [
+          291,
+          518
+        ],
+        "dtype": "torch.uint8"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "depth_path",
+        "type": "str"
+      },
+      {
+        "key": "source_type",
+        "type": "str"
+      },
+      {
+        "key": "frame_token",
+        "type": "str"
+      },
+      {
+        "key": "sequence",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      },
+      {
+        "key": "intrinsics",
+        "shape": [
+          3,
+          3
+        ],
+        "dtype": "torch.float32"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "EndoVis2018_train",
+    "list_path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
+    "list_exists": true,
+    "sample_path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train/endovis2018_seg_depth/output_rectified/left/seq_10_frame000.pt",
+    "sample_exists": true,
+    "size_bytes": 2576433,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          414,
+          518
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "semseg_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.uint8"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "depth_path",
+        "type": "str"
+      },
+      {
+        "key": "source_type",
+        "type": "str"
+      },
+      {
+        "key": "frame_token",
+        "type": "str"
+      },
+      {
+        "key": "sequence",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      },
+      {
+        "key": "intrinsics",
+        "shape": [
+          3,
+          3
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "intrinsics_key",
+        "type": "str"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "EndoVis2018_val",
+    "list_path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
+    "list_exists": true,
+    "sample_path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val/endovis2018_seg_depth/output_rectified/left/seq_15_frame000.pt",
+    "sample_exists": true,
+    "size_bytes": 2576433,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          414,
+          518
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "semseg_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.uint8"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "depth_path",
+        "type": "str"
+      },
+      {
+        "key": "source_type",
+        "type": "str"
+      },
+      {
+        "key": "frame_token",
+        "type": "str"
+      },
+      {
+        "key": "sequence",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      },
+      {
+        "key": "intrinsics",
+        "shape": [
+          3,
+          3
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "intrinsics_key",
+        "type": "str"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "C3VDv2",
+    "list_path": "/data/ziyi/multitask/data/NO/c3vdv2/cache/cache.txt",
+    "list_exists": true,
+    "sample_path": "/data/ziyi/multitask/data/NO/c3vdv2/cache/c1_ascending_t1_v1/rgb/0000.pt",
+    "sample_exists": true,
+    "size_bytes": 2361094,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          414,
+          518
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.bool"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "SimCol",
+    "list_path": "/home/ziyi/ssde/data/simcol/cache/train_all_cache.txt",
+    "list_exists": true,
+    "sample_path": "/home/ziyi/ssde/data/simcol/cache/train/SyntheticColon_I/Frames_S1/FrameBuffer_0000.pt",
+    "sample_exists": true,
+    "size_bytes": 2710135,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          475,
+          475
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          475,
+          475
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          475,
+          475
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "semseg_mask",
+        "shape": [
+          475,
+          475
+        ],
+        "dtype": "torch.uint8"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "depth_path",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "Kidney3D",
+    "list_path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
+    "list_exists": true,
+    "sample_path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train/01/noLaser/image/Image0001.pt",
+    "sample_exists": true,
+    "size_bytes": 1811633,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          291,
+          518
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          291,
+          518
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          291,
+          518
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "semseg_mask",
+        "shape": [
+          291,
+          518
+        ],
+        "dtype": "torch.uint8"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "depth_path",
+        "type": "str"
+      },
+      {
+        "key": "mask_path",
+        "type": "str"
+      },
+      {
+        "key": "source_type",
+        "type": "str"
+      },
+      {
+        "key": "dataset_name",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "dVPN",
+    "list_path": "/home/ziyi/ssde/data/dVPN/cache/train_all_cache.txt",
+    "list_exists": true,
+    "sample_path": "/home/ziyi/ssde/data/dVPN/cache/train/train/image_0/000001.pt",
+    "sample_exists": true,
+    "size_bytes": 813208,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          192,
+          384
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          192,
+          384
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          192,
+          384
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "depth_path",
+        "type": "str"
+      },
+      {
+        "key": "source_type",
+        "type": "str"
+      },
+      {
+        "key": "dataset_name",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "hamlyn",
+    "list_path": "/data/ziyi/multitask/data/LS/hamlyn/cache_pt/all_cache.txt",
+    "list_exists": false,
+    "sample_path": null,
+    "sample_exists": false,
+    "size_bytes": null,
+    "tensor_summaries": [],
+    "error": "cache list not found"
+  },
+  {
+    "dataset": "EndoNeRF",
+    "list_path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/all_cache.txt",
+    "list_exists": true,
+    "sample_path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train/endonerf/cutting_tissues_twice/images/000000.pt",
+    "sample_exists": true,
+    "size_bytes": 3005385,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          414,
+          518
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "semseg_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.uint8"
+      },
+      {
+        "key": "depth_valid_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "seg_valid_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "depth_path",
+        "type": "str"
+      },
+      {
+        "key": "source_type",
+        "type": "str"
+      },
+      {
+        "key": "sequence",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      },
+      {
+        "key": "intrinsics_key",
+        "type": "str"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "C3VD",
+    "list_path": "/data/ziyi/multitask/data/NO/c3vd/cache/all_cache.txt",
+    "list_exists": true,
+    "sample_path": "/data/ziyi/multitask/data/NO/c3vd/cache/train/trans_t2_b/0097_color.pt",
+    "sample_exists": true,
+    "size_bytes": 2361175,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          414,
+          518
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          414,
+          518
+        ],
+        "dtype": "torch.bool"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      }
+    ],
+    "error": null
+  },
+  {
+    "dataset": "EndoMapper",
+    "list_path": "/data/ziyi/multitask/data/NO/endomapper_sim/cache/all_cache.txt",
+    "list_exists": true,
+    "sample_path": "/data/ziyi/multitask/data/NO/endomapper_sim/cache/train/Seq_0/rgb/image_0000.pt",
+    "sample_exists": true,
+    "size_bytes": 2213079,
+    "tensor_summaries": [
+      {
+        "key": "image",
+        "shape": [
+          3,
+          388,
+          518
+        ],
+        "dtype": "torch.float16"
+      },
+      {
+        "key": "depth",
+        "shape": [
+          388,
+          518
+        ],
+        "dtype": "torch.float32"
+      },
+      {
+        "key": "image_path",
+        "type": "str"
+      },
+      {
+        "key": "max_depth",
+        "type": "float"
+      },
+      {
+        "key": "valid_mask",
+        "shape": [
+          388,
+          518
+        ],
+        "dtype": "torch.bool"
+      }
+    ],
+    "error": null
+  }
+]

@@ -6,6 +6,7 @@ from typing import List, Callable, Optional
 
 from .camera_utils import get_camera_info
 from .utils import compute_valid_mask, map_ls_semseg_to_10_classes, map_semseg_to_three_classes
+from ..util.local_cache import LocalCacheManager
 
 
 def generate_dataset_cache(dataset: Dataset, output_dir: str, filelist_name: str = "cache_files.txt", origin_prefix: str = "", cache_root_path: str = "") -> str:
@@ -102,7 +103,14 @@ class DepthCacheDataset(Dataset):
     一个通用的缓存数据集基类，用于从.pt文件加载预先保存的样本。
     """
 
-    def __init__(self, filelist_path: str, dataset_type: str = "unknown", path_transform: Callable[[str], str] = None, dataset_name: Optional[str] = None):
+    def __init__(
+        self,
+        filelist_path: str,
+        dataset_type: str = "unknown",
+        path_transform: Callable[[str], str] = None,
+        dataset_name: Optional[str] = None,
+        local_cache_dir: Optional[str] = None,
+    ):
         """
         初始化缓存数据集。
 
@@ -134,6 +142,7 @@ class DepthCacheDataset(Dataset):
 
         self.dataset_type = dataset_type
         self.dataset_name = dataset_name or _infer_dataset_name_from_path(filelist_path)
+        self._local_cache = LocalCacheManager(local_cache_dir, namespace=f"depth_cache/{self.dataset_name}")
 
     def __getitem__(self, item: int) -> dict:
         """
@@ -146,7 +155,10 @@ class DepthCacheDataset(Dataset):
             dict: 加载的缓存数据，包含 'source_type' 键。
         """
         cache_path = self.filelist[item]
-        cached_data = torch.load(cache_path)
+        load_path = cache_path
+        if self._local_cache.enabled:
+            load_path = self._local_cache.ensure_copy(cache_path, cache_path)
+        cached_data = torch.load(load_path, map_location="cpu")
         if 'c3vd' in cache_path:
             cached_data['max_depth'] = 0.1
         elif 'simcol' in cache_path:
@@ -267,6 +279,7 @@ class SegCacheDataset(Dataset):
         path_transform: Callable[[str], str] = None,
         dataset_name: Optional[str] = None,
         label_mode: str = "raw",
+        local_cache_dir: Optional[str] = None,
     ):
         """
         初始化缓存数据集。
@@ -288,6 +301,7 @@ class SegCacheDataset(Dataset):
         self.dataset_type = dataset_type
         self.dataset_name = dataset_name or _infer_dataset_name_from_path(filelist_path)
         self.label_mode = label_mode
+        self._local_cache = LocalCacheManager(local_cache_dir, namespace=f"seg_cache/{self.dataset_name}")
 
     def __getitem__(self, item: int) -> dict:
         """
@@ -300,8 +314,11 @@ class SegCacheDataset(Dataset):
             dict: 加载的缓存数据，包含 'source_type' 键。
         """
         cache_path = self.filelist[item]
+        load_path = cache_path
+        if self._local_cache.enabled:
+            load_path = self._local_cache.ensure_copy(cache_path, cache_path)
         try:
-            cached_data = torch.load(cache_path)
+            cached_data = torch.load(load_path, map_location="cpu")
             cached_data['source_type'] = self.dataset_type  # 添加数据源类型标识
             cached_data['dataset_name'] = self.dataset_name
 

@@ -27,8 +27,8 @@ LORA_ALPHA=8
 DATASET_CONFIG_NAME="ls_only_v1"
 PATH_TRANSFORM_NAME="ls_default"
 DATASET_MODALITY="mt"
-TRAIN_DATASET_INCLUDE="EndoSynth"
-VAL_DATASET_INCLUDE="EndoSynth"
+TRAIN_DATASET_INCLUDE="SCARED,StereoMIS,dVPN,C3VDv2,SimCol,Kidney3D,EndoSynth"
+VAL_DATASET_INCLUDE="hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D"
 
 BASE_DATA_PATH="/data/ziyi/multitask"
 SAVE_PATH="${BASE_DATA_PATH}/save/benchmark_pt_cache_$(date +%Y%m%d_%H%M%S)"

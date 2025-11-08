@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Foundation Depth Camera Training (Simple head)
+# Foundation Depth Camera Training (VGGT-like head)
 # ==============================================================================
 set -euo pipefail
 
@@ -13,43 +13,44 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=3
-CUDA_DEVICES="5,4,2"
-MASTER_PORT=20764
+NUM_GPUS=${NUM_GPUS:-6}
+CUDA_DEVICES=${CUDA_DEVICES:-"1,2,3,4,5,6"}
+MASTER_PORT=${MASTER_PORT:-20863}
 
 # ------------------------------------------------------------------------------
 # Core training hyper-parameters
 # ------------------------------------------------------------------------------
-ENCODER="vits"        # {vits, vitb, vitl, dinov3_*}
-FEATURES=64
-EPOCHS=120
-BATCH_SIZE=24
-VAL_BATCH_SIZE=96
-LEARNING_RATE=5e-6
-WEIGHT_DECAY=0.01
-IMG_SIZE=518
-MAX_DEPTH=0.3
-MIN_DEPTH=1e-6
-MIXED_PRECISION=true
-FROZEN_BACKBONE=false
-CAMERA_HEAD_MODE="simple"
-CAMERA_LOSS_WEIGHT=5.0
-CAMERA_LR=1e-3
+ENCODER=${ENCODER:-"vits"}        # {vits, vitb, vitl, dinov3_*}
+FEATURES=${FEATURES:-64}
+EPOCHS=${EPOCHS:-120}
+BATCH_SIZE=${BATCH_SIZE:-24}
+VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-96}
+LEARNING_RATE=${LEARNING_RATE:-5e-6}
+WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
+IMG_SIZE=${IMG_SIZE:-518}
+MAX_DEPTH=${MAX_DEPTH:-0.3}
+MIN_DEPTH=${MIN_DEPTH:-1e-6}
+MIXED_PRECISION=${MIXED_PRECISION:-true}
+FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
+# CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"vggtlike"}
+CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"none"}
+CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.0}
+CAMERA_LR=${CAMERA_LR:-1e-3}
 
-FM_SAMPLE_MODE="full"
-FM_SAMPLE_SIZE=10
-TRAIN_SAMPLE_STEP=150
-VAL_SAMPLE_STEP=20
-MAX_SAMPLES_PER_DATASET=""
+FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
+FM_SAMPLE_SIZE=${FM_SAMPLE_SIZE:-10}
+TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
+VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-1}
+MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
 
 # ------------------------------------------------------------------------------
 # Dataset configuration
 # NOTE: define `fd_depth_fm_v1` in util/data_utils.DATASET_PATHS to point to
 #       the exact caches/filelists for the datasets enumerated below.
 # ------------------------------------------------------------------------------
-DATASET_CONFIG_NAME="fd_depth_fm_v1"
-DATASET_MODALITY="fd"
-PATH_TRANSFORM_NAME="none"
+DATASET_CONFIG_NAME=${DATASET_CONFIG_NAME:-"fd_depth_fm_v1"}
+DATASET_MODALITY=${DATASET_MODALITY:-"fd"}       # depth-only foundation mode
+PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET}
 
 TRAIN_DATASET_INCLUDE="SCARED,StereoMIS,dVPN,C3VDv2,SimCol,Kidney3D,EndoSynth"
@@ -58,14 +59,22 @@ VAL_DATASET_INCLUDE="hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D"
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
 # ------------------------------------------------------------------------------
-BASE_DATA_PATH="/data/ziyi/multitask"
-PRETRAINED_WEIGHTS="${BASE_DATA_PATH}/pretained/depth_anything_v2_vits.pth"
-RESUME_CHECKPOINT=""
+BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
+HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
+export BASE_DATA_PATH
+export HOME_SSD_PATH
+LOCAL_CACHE_DIR=${LOCAL_CACHE_DIR:-"/data/ziyi/cache"}
+if [[ -n "${LOCAL_CACHE_DIR}" ]]; then
+    mkdir -p "${LOCAL_CACHE_DIR}"
+    export LOCAL_CACHE_DIR
+fi
+PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vits.pth"}
+RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
 # ------------------------------------------------------------------------------
 # Output logging
 # ------------------------------------------------------------------------------
-SAVE_ROOT=${SAVE_ROOT:-"/data/ziyi/multitask/save/FM"}
+SAVE_ROOT=${SAVE_ROOT:-"/data/ziyi/save/FM"}
 RUN_ID=$(date +%Y%m%d_%H%M%S)
 SAMPLE_TAG="camera_${CAMERA_HEAD_MODE}_train${TRAIN_SAMPLE_STEP}"
 SAVE_PATH="${SAVE_ROOT}/fd_${ENCODER}_${DATASET_CONFIG_NAME}_${SAMPLE_TAG}_${RUN_ID}"
@@ -86,7 +95,7 @@ echo "  Depth range:           [${MIN_DEPTH}, ${MAX_DEPTH}]"
 echo "  Mixed precision:       ${MIXED_PRECISION}"
 echo "  Frozen backbone:       ${FROZEN_BACKBONE}"
 echo "  Camera head:           ${CAMERA_HEAD_MODE} (weight=${CAMERA_LOSS_WEIGHT})"
-echo "  Camera LR:            ${CAMERA_LR}"
+echo "  Camera LR:             ${CAMERA_LR}"
 echo "  Dataset config:        ${DATASET_CONFIG_NAME}"
 echo "  Dataset modality:      ${DATASET_MODALITY}"
 echo "  Train include list:    ${TRAIN_DATASET_INCLUDE}"
@@ -113,6 +122,16 @@ fi
 if [[ -n "${PRETRAINED_WEIGHTS}" && ! -f "${PRETRAINED_WEIGHTS}" ]]; then
     echo "[WARN] Pretrained weights not found at ${PRETRAINED_WEIGHTS}, training will start from scratch."
     PRETRAINED_WEIGHTS=""
+fi
+if [[ -n "${PRETRAINED_WEIGHTS}" && -f "${PRETRAINED_WEIGHTS}" && -n "${LOCAL_CACHE_DIR}" ]]; then
+    CACHE_WEIGHTS_DIR="${LOCAL_CACHE_DIR}/pretrained_weights"
+    mkdir -p "${CACHE_WEIGHTS_DIR}"
+    CACHE_WEIGHTS_PATH="${CACHE_WEIGHTS_DIR}/$(basename "${PRETRAINED_WEIGHTS}")"
+    if [[ ! -f "${CACHE_WEIGHTS_PATH}" || "${PRETRAINED_WEIGHTS}" -nt "${CACHE_WEIGHTS_PATH}" ]]; then
+        echo "[INFO] Mirroring pretrained weights to local cache: ${CACHE_WEIGHTS_PATH}"
+        rsync -a "${PRETRAINED_WEIGHTS}" "${CACHE_WEIGHTS_PATH}"
+    fi
+    PRETRAINED_WEIGHTS="${CACHE_WEIGHTS_PATH}"
 fi
 
 # ------------------------------------------------------------------------------
@@ -155,6 +174,9 @@ if [[ -n "${TRAIN_DATASET_INCLUDE}" ]]; then
 fi
 if [[ -n "${VAL_DATASET_INCLUDE}" ]]; then
     BASE_CMD+=(--val-dataset-include "${VAL_DATASET_INCLUDE}")
+fi
+if [[ -n "${LOCAL_CACHE_DIR}" ]]; then
+    BASE_CMD+=(--local-cache-dir "${LOCAL_CACHE_DIR}")
 fi
 if [[ "${MIXED_PRECISION}" == "true" ]]; then
     BASE_CMD+=(--mixed-precision)

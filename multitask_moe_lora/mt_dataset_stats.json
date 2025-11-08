@@ -1,0 +1,442 @@
+{
+  "Kidney3D": {
+    "domain": "NO",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
+        "count": 3000
+      },
+      "val": {
+        "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
+        "count": 1000
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train/01/noLaser/image/Image0001.pt",
+    "pt_size_bytes": 1811633,
+    "pt_keys": [
+      "image",
+      "depth",
+      "valid_mask",
+      "semseg_mask",
+      "image_path",
+      "depth_path",
+      "mask_path",
+      "source_type",
+      "dataset_name",
+      "max_depth"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 291, 518) torch.float16",
+      "depth": "(291, 518) torch.float32",
+      "valid_mask": "(291, 518) torch.bool",
+      "semseg_mask": "(291, 518) torch.uint8"
+    },
+    "label_counts": {
+      "0": 1480396,
+      "255": 26984
+    },
+    "total_pixels": 1507380,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "RIRS-SegC": {
+    "domain": "NO",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/NO/RIRS-SegC/train_split_cache.txt",
+        "count": 1996
+      },
+      "val": {
+        "path": "/data/ziyi/multitask/data/NO/RIRS-SegC/val_split_cache.txt",
+        "count": 556
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/NO/RIRS-SegC/img/case06_01/0641.pt",
+    "pt_size_bytes": 2148769,
+    "pt_keys": [
+      "image",
+      "semseg_mask",
+      "image_path",
+      "valid_mask"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 518, 518) torch.float16",
+      "semseg_mask": "(518, 518) torch.uint8",
+      "valid_mask": "(518, 518) torch.bool"
+    },
+    "label_counts": {
+      "0": 1293253,
+      "1": 1361539,
+      "255": 4218,
+      "2": 24230
+    },
+    "total_pixels": 2683240,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "RIRS-SegP": {
+    "domain": "NO",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/NO/RIRS-SegP/train_cache.txt",
+        "count": 499
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/NO/RIRS-SegP/img/Pig_Basket_Stone/0001.pt",
+    "pt_size_bytes": 2144609,
+    "pt_keys": [
+      "image",
+      "image_path",
+      "semseg_mask",
+      "valid_mask"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 517, 518) torch.float16",
+      "semseg_mask": "(517, 518) torch.uint8",
+      "valid_mask": "(517, 518) torch.bool"
+    },
+    "label_counts": {
+      "0": 2245213,
+      "1": 432842,
+      "255": 5
+    },
+    "total_pixels": 2678060,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "clinicDB": {
+    "domain": "NO",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/NO/clinicDB/cache/train_cache.txt",
+        "count": 612
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/NO/clinicDB/cache/PNG/Original/1.pt",
+    "pt_size_bytes": 1610054,
+    "pt_keys": [
+      "image",
+      "semseg_mask",
+      "image_path",
+      "valid_mask"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 388, 518) torch.float16",
+      "semseg_mask": "(388, 518) torch.uint8",
+      "valid_mask": "(388, 518) torch.bool"
+    },
+    "label_counts": {
+      "0": 1088330,
+      "3": 354656,
+      "255": 566854
+    },
+    "total_pixels": 2009840,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "CVC-EndoScene": {
+    "domain": "NO",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/NO/CVC-EndoScene/TrainDataset/cache/train_cache.txt",
+        "count": 547
+      },
+      "val": {
+        "path": "/data/ziyi/multitask/data/NO/CVC-EndoScene/ValidationDataset/cache/train_cache.txt",
+        "count": 183
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/NO/CVC-EndoScene/TrainDataset/cache/images/1.pt",
+    "pt_size_bytes": 1871110,
+    "pt_keys": [
+      "image",
+      "semseg_mask",
+      "image_path",
+      "valid_mask"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 451, 518) torch.float16",
+      "semseg_mask": "(451, 518) torch.uint8",
+      "valid_mask": "(451, 518) torch.bool"
+    },
+    "label_counts": {
+      "0": 1778433,
+      "3": 85647,
+      "255": 472100
+    },
+    "total_pixels": 2336180,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "Kvasir-SEG": {
+    "domain": "NO",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/NO/kvasir-SEG-split/cache_pt/train_cache.txt",
+        "count": 880
+      },
+      "val": {
+        "path": "/data/ziyi/multitask/data/NO/kvasir-SEG-split/cache_pt/val_cache.txt",
+        "count": 120
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/NO/kvasir-SEG-split/cache_pt/train/images/cju0qkwl35piu0993l0dewei2.pt",
+    "pt_size_bytes": 1601269,
+    "pt_keys": [
+      "image",
+      "semseg_mask",
+      "image_path"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 441, 518) torch.float16",
+      "semseg_mask": "(441, 518) torch.uint8"
+    },
+    "label_counts": {
+      "0": 1584103,
+      "3": 364867,
+      "255": 340590
+    },
+    "total_pixels": 2289560,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "bkai-igh-neopolyp": {
+    "domain": "NO",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/NO/bkai-igh-neopolyp/cache/train_cache.txt",
+        "count": 1000
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/NO/bkai-igh-neopolyp/cache/train/7979870116d06046f5d8dd18841d318d.pt",
+    "pt_size_bytes": 1610461,
+    "pt_keys": [
+      "image",
+      "semseg_mask",
+      "image_path",
+      "valid_mask"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 388, 518) torch.float16",
+      "semseg_mask": "(388, 518) torch.uint8",
+      "valid_mask": "(388, 518) torch.bool"
+    },
+    "label_counts": {
+      "0": 1678514,
+      "3": 65130,
+      "255": 266196
+    },
+    "total_pixels": 2009840,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "ETIS-LaribPolypDB": {
+    "domain": "NO",
+    "splits": {
+      "val": {
+        "path": "/data/ziyi/multitask/data/NO/ETIS-LaribPolypDB/train_cache.txt",
+        "count": 196
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/NO/ETIS-LaribPolypDB/images/1.pt",
+    "pt_size_bytes": 1692934,
+    "pt_keys": [
+      "image",
+      "semseg_mask",
+      "image_path",
+      "valid_mask"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 408, 518) torch.float16",
+      "semseg_mask": "(408, 518) torch.uint8",
+      "valid_mask": "(408, 518) torch.bool"
+    },
+    "label_counts": {
+      "0": 1971146,
+      "3": 17427,
+      "255": 124867
+    },
+    "total_pixels": 2113440,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "EndoSynth": {
+    "domain": "LS",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+        "count": 2052
+      },
+      "val": {
+        "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+        "count": 229
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train/EndoSynth/samples/000000.pt",
+    "pt_size_bytes": 1811411,
+    "pt_keys": [
+      "image",
+      "depth",
+      "valid_mask",
+      "semseg_mask",
+      "image_path",
+      "depth_path",
+      "mask_path",
+      "source_type",
+      "max_depth"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 291, 518) torch.float16",
+      "depth": "(291, 518) torch.float32",
+      "valid_mask": "(291, 518) torch.bool",
+      "semseg_mask": "(291, 518) torch.uint8"
+    },
+    "label_counts": {
+      "0": 1062872,
+      "5": 187245,
+      "6": 33154,
+      "2": 52649,
+      "1": 171460
+    },
+    "total_pixels": 1507380,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "EndoVis2017": {
+    "domain": "LS",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
+        "count": 1800
+      },
+      "eval": {
+        "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
+        "count": 600
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train/instrument_dataset_1/output_rectified/left/frame000.pt",
+    "pt_size_bytes": 2576612,
+    "pt_keys": [
+      "image",
+      "depth",
+      "valid_mask",
+      "semseg_mask",
+      "image_path",
+      "depth_path",
+      "mask_path",
+      "source_type",
+      "frame_token",
+      "sequence",
+      "max_depth",
+      "intrinsics",
+      "intrinsics_key"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 414, 518) torch.float16",
+      "depth": "(414, 518) torch.float32",
+      "valid_mask": "(414, 518) torch.bool",
+      "semseg_mask": "(414, 518) torch.uint8",
+      "intrinsics": "(3, 3) torch.float32"
+    },
+    "label_counts": {
+      "0": 1775485,
+      "1": 106636,
+      "2": 44801,
+      "7": 79296,
+      "3": 138302
+    },
+    "total_pixels": 2144520,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "EndoVis2018": {
+    "domain": "LS",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
+        "count": 1639
+      },
+      "val": {
+        "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
+        "count": 587
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train/endovis2018_seg_depth/output_rectified/left/seq_10_frame000.pt",
+    "pt_size_bytes": 2576433,
+    "pt_keys": [
+      "image",
+      "depth",
+      "valid_mask",
+      "semseg_mask",
+      "image_path",
+      "depth_path",
+      "source_type",
+      "frame_token",
+      "sequence",
+      "max_depth",
+      "intrinsics",
+      "intrinsics_key"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 414, 518) torch.float16",
+      "depth": "(414, 518) torch.float32",
+      "valid_mask": "(414, 518) torch.bool",
+      "semseg_mask": "(414, 518) torch.uint8",
+      "intrinsics": "(3, 3) torch.float32"
+    },
+    "label_counts": {
+      "0": 1948561,
+      "1": 128630,
+      "8": 67329
+    },
+    "total_pixels": 2144520,
+    "sampled_files": 10,
+    "errors": []
+  },
+  "EndoNeRF": {
+    "domain": "LS",
+    "splits": {
+      "train": {
+        "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
+        "count": 141
+      },
+      "val": {
+        "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
+        "count": 15
+      }
+    },
+    "pt_example": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train/endonerf/cutting_tissues_twice/images/000000.pt",
+    "pt_size_bytes": 3005385,
+    "pt_keys": [
+      "image",
+      "depth",
+      "valid_mask",
+      "semseg_mask",
+      "depth_valid_mask",
+      "seg_valid_mask",
+      "image_path",
+      "depth_path",
+      "source_type",
+      "sequence",
+      "max_depth",
+      "intrinsics_key"
+    ],
+    "tensor_shapes": {
+      "image": "(3, 414, 518) torch.float16",
+      "depth": "(414, 518) torch.float32",
+      "valid_mask": "(414, 518) torch.bool",
+      "semseg_mask": "(414, 518) torch.uint8",
+      "depth_valid_mask": "(414, 518) torch.bool",
+      "seg_valid_mask": "(414, 518) torch.bool"
+    },
+    "label_counts": {
+      "0": 1775129,
+      "1": 21733,
+      "6": 295858,
+      "255": 51800
+    },
+    "total_pixels": 2144520,
+    "sampled_files": 10,
+    "errors": []
+  }
+}

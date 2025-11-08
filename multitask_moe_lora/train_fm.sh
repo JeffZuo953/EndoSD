@@ -54,8 +54,8 @@ DATASET_MODALITY=${DATASET_MODALITY:-"fd"}       # depth-only foundation mode
 PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET_VALUE}
 
-TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,dVPN,EndoVis2017,EndoVis2018,C3VDv2,SimCol,Kidney3D"}
-VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper"}
+TRAIN_DATASET_INCLUDE="SCARED,StereoMIS,dVPN,C3VDv2,SimCol,Kidney3D,EndoSynth"
+VAL_DATASET_INCLUDE="hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D"
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
