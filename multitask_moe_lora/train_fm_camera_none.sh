@@ -1,11 +1,13 @@
 #!/bin/bash
 # ==============================================================================
-# Foundation Depth Camera Training (VGGT-like head)
+# Foundation Depth Camera Training (No camera head)
 # ==============================================================================
 set -euo pipefail
 
 export PYTHONDONTWRITEBYTECODE=1
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-4}
+export NCCL_DEBUG=${NCCL_DEBUG:-INFO}
+export TORCH_DISTRIBUTED_DEBUG=${TORCH_DISTRIBUTED_DEBUG:-DETAIL}
 PARENT_DIR="$(dirname "$(pwd)")"
 export PYTHONPATH="$(pwd):${PARENT_DIR}:${PYTHONPATH:-}"
 export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
@@ -32,15 +34,15 @@ MAX_DEPTH=${MAX_DEPTH:-0.3}
 MIN_DEPTH=${MIN_DEPTH:-1e-6}
 MIXED_PRECISION=${MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
-# CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"vggtlike"}
 CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"none"}
-CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.0}
-CAMERA_LR=${CAMERA_LR:-1e-3}
+CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.3}
+CAMERA_LOSS_TYPE=${CAMERA_LOSS_TYPE:-"l2"}   # l1 | l2
+CAMERA_LR=${CAMERA_LR:-5e-4}
 
 FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
-FM_SAMPLE_SIZE=${FM_SAMPLE_SIZE:-10}
-TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-150}
-VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-20}
+TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
+VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-1}
+VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-100}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
 
 # ------------------------------------------------------------------------------
@@ -53,10 +55,11 @@ DATASET_MODALITY=${DATASET_MODALITY:-"fd"}       # depth-only foundation mode
 PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET}
 
-TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
-VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper"}
 
-# ------------------------------------------------------------------------------
+TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoSynth,EndoVis2017"}
+
+# ------------------------------------------------------------------------ ------
 # Checkpoint configuration
 # ------------------------------------------------------------------------------
 BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
@@ -76,7 +79,7 @@ mkdir -p "${SAVE_PATH}"
 exec > >(tee -a "${SAVE_PATH}/train.log") 2>&1
 
 echo "=============================================================================="
-echo "FD Depth Training (Legacy, No-LoRA)"
+echo "FD Depth Training (Legacy, No-LoRA)"CAMERA_READY_ONLY
 echo "------------------------------------------------------------------------------"
 echo "  Encoder:               ${ENCODER}"
 echo "  Features:              ${FEATURES}"
@@ -88,6 +91,7 @@ echo "  Depth range:           [${MIN_DEPTH}, ${MAX_DEPTH}]"
 echo "  Mixed precision:       ${MIXED_PRECISION}"
 echo "  Frozen backbone:       ${FROZEN_BACKBONE}"
 echo "  Camera head:           ${CAMERA_HEAD_MODE} (weight=${CAMERA_LOSS_WEIGHT})"
+echo "  Camera loss type:      ${CAMERA_LOSS_TYPE}"
 echo "  Camera LR:             ${CAMERA_LR}"
 echo "  Dataset config:        ${DATASET_CONFIG_NAME}"
 echo "  Dataset modality:      ${DATASET_MODALITY}"
@@ -101,6 +105,7 @@ else
 fi
 echo "  Sample mode:           ${FM_SAMPLE_MODE} (size=${FM_SAMPLE_SIZE})"
 echo "  Train sample step:     ${TRAIN_SAMPLE_STEP}"
+echo "  Val min samples:       ${VAL_MIN_SAMPLES_PER_DATASET}"
 echo "  Save path:             ${SAVE_PATH}"
 echo "=============================================================================="
 echo ""
@@ -142,10 +147,12 @@ BASE_CMD=(
     --path-transform-name "${PATH_TRANSFORM_NAME}"
     --train-sample-step "${TRAIN_SAMPLE_STEP}"
     --val-sample-step "${VAL_SAMPLE_STEP}"
+    --val-min-samples-per-dataset "${VAL_MIN_SAMPLES_PER_DATASET}"
     --mode original
     --save-path "${SAVE_PATH}"
     --camera-head-mode "${CAMERA_HEAD_MODE}"
     --camera-loss-weight "${CAMERA_LOSS_WEIGHT}"
+    --camera-loss-type "${CAMERA_LOSS_TYPE}"
     --lr-camera "${CAMERA_LR}"
 )
 if [[ -n "${MAX_SAMPLES_PER_DATASET}" ]]; then

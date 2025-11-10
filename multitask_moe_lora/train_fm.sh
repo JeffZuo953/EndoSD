@@ -32,6 +32,7 @@ MAX_DEPTH=${MAX_DEPTH:-0.3}
 MIN_DEPTH=${MIN_DEPTH:-1e-6}
 MIXED_PRECISION=${MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
+VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-100}
 
 FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
 FM_SAMPLE_SIZE=${FM_SAMPLE_SIZE:-10}
@@ -54,8 +55,9 @@ DATASET_MODALITY=${DATASET_MODALITY:-"fd"}       # depth-only foundation mode
 PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET_VALUE}
 
-TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,dVPN,EndoVis2017,EndoVis2018,EndoSynth,C3VDv2,SimCol,Kidney3D"}
-VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper"}
+
+TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,Endovis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,Endovis2017"}
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
@@ -98,6 +100,7 @@ else
     echo "  Max samples / dataset: all"
 fi
 echo "  Sample mode:           ${FM_SAMPLE_MODE} (size=${FM_SAMPLE_SIZE})"
+echo "  Val min samples:       ${VAL_MIN_SAMPLES_PER_DATASET}"
 echo "  Save path:             ${SAVE_PATH}"
 echo "=============================================================================="
 echo ""
@@ -137,6 +140,7 @@ BASE_CMD=(
     --dataset-config-name "${DATASET_CONFIG_NAME}"
     --dataset-modality "${DATASET_MODALITY}"
     --path-transform-name "${PATH_TRANSFORM_NAME}"
+    --val-min-samples-per-dataset "${VAL_MIN_SAMPLES_PER_DATASET}"
     --mode original
     --save-path "${SAVE_PATH}"
 )

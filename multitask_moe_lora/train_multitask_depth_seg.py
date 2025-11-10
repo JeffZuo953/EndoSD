@@ -56,6 +56,17 @@ def main():
         # 5. 设置数据加载器
         train_depth_loader, train_seg_loader, val_depth_loader, val_seg_loader = setup_dataloaders(config)
 
+        auto_disable_seg = train_seg_loader is None
+        if config.disable_seg_head or auto_disable_seg:
+            if auto_disable_seg and not config.disable_seg_head:
+                config.disable_seg_head = True
+                if rank == 0:
+                    logger.info("No segmentation training dataset detected. Segmentation head disabled automatically.")
+            elif config.disable_seg_head and rank == 0:
+                logger.info("Segmentation head disabled via flag; dropping segmentation loaders.")
+            train_seg_loader = None
+            val_seg_loader = None
+
         if rank == 0:
             def _log_loader_summary(loader, label: str) -> None:
                 if loader is None:
@@ -156,4 +167,7 @@ def main():
 
 
 if __name__ == "__main__":
+    print("--- 警告: 已启用 autograd 异常检测 仅在调试时开启，会降低训练速度---")
+    torch.autograd.set_detect_anomaly(True) 
     main()
+

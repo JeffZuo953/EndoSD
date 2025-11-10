@@ -21,11 +21,14 @@ class TrainingConfig:
     max_depth: float = 0.2
     frozen_backbone: bool = False
     seg_input_type: str = "last_four"
+    seg_head_type: str = "linear"
     camera_head_mode: str = "none"
     camera_loss_type: str = "l1"
+    camera_backbone_loss_scale: float = 1.0
+    camera_head_loss_scale: float = 1.0
 
     # 模式选择参数
-    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "moe-only", "lora-moe", "endo-unid"
+    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "endo-unid"
 
     # LoRA 参数
     use_lora: bool = False  # 由mode参数自动设置
@@ -64,12 +67,11 @@ class TrainingConfig:
     save_interval: int = 1
     massive_checkpoint: bool = False
     
-    # 损失加权策略
-    loss_weighting_strategy: str = "fixed"  # 可选: "fixed", "uwl", "dwa"
+    # 损失加权
     depth_loss_weight: float = 1.0
     seg_loss_weight: float = 1.0
-    dwa_temperature: float = 2.0  # DWA的温度参数
     camera_loss_weight: float = 1.0
+    disable_seg_head: bool = False
     tolerate_validation_errors: bool = False
 
     # 数据参数
@@ -79,6 +81,7 @@ class TrainingConfig:
     max_samples_per_dataset: Optional[int] = None
     train_sample_step: int = 1
     val_sample_step: int = 1
+    val_min_samples_per_dataset: int = 0
     dataset_modality: str = "mt"
     train_dataset_include: Optional[List[str]] = None
     val_dataset_include: Optional[List[str]] = None
@@ -114,6 +117,10 @@ def create_parser() -> argparse.ArgumentParser:
                         default="last_four",
                         choices=["last", "last_four", "from_depth"],
                         help="Input type for segmentation head ('last', 'last_four', 'from_depth')")
+    parser.add_argument("--seg-head-type",
+                        default="linear",
+                        choices=["linear", "sf"],
+                        help="Segmentation head architecture (linear BN head or SegFormer-style head)")
     parser.add_argument("--camera-head-mode",
                         default="none",
                         choices=["none", "simple", "vggtlike", "vggt-like"],
@@ -122,12 +129,20 @@ def create_parser() -> argparse.ArgumentParser:
                         default="l1",
                         choices=["l1", "l2"],
                         help="Camera-head loss type (relative L1 or relative L2)")
+    parser.add_argument("--camera-backbone-loss-scale",
+                        default=1.0,
+                        type=float,
+                        help="Multiplier applied to camera loss when updating backbone/depth parameters")
+    parser.add_argument("--camera-head-loss-scale",
+                        default=1.0,
+                        type=float,
+                        help="Multiplier applied to camera loss for the camera head itself")
 
     # 模式选择和PEFT参数
     parser.add_argument("--mode",
                         default="original",
-                        choices=["original", "lora-only", "legacy-lora", "moe-only", "lora-moe", "endo-unid"],
-                        help="Training mode: original, lora-only, legacy-lora (attention-only LoRA), moe-only, lora-moe, or endo-unid (task-split LoRA)")
+                        choices=["original", "lora-only", "legacy-lora", "endo-unid"],
+                        help="Training mode: original, lora-only, legacy-lora (attention-only LoRA), or endo-unid (task-split LoRA)")
 
     parser.add_argument("--lora-r", default=4, type=int, help="LoRA rank (r)")
     parser.add_argument("--lora-alpha", default=8, type=int, help="LoRA alpha")
@@ -172,14 +187,15 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--save-interval", default=1, type=int, help="Save checkpoint every N epochs")
     parser.add_argument("--massive-checkpoint", action="store_true", help="Save checkpoint for every single epoch")
     
-    # 损失加权策略
-    parser.add_argument("--loss-weighting-strategy", default="fixed", choices=["fixed", "uwl", "dwa"],
-                        help="Loss weighting strategy: fixed, uwl (Uncertainty to Weigh Losses), or dwa (Dynamic Weight Averaging)")
-    parser.add_argument("--depth-loss-weight", default=1.0, type=float, help="Fixed weight for depth loss (used with 'fixed' strategy)")
-    parser.add_argument("--seg-loss-weight", default=1.0, type=float, help="Fixed weight for segmentation loss (used with 'fixed' strategy)")
-    parser.add_argument("--dwa-temperature", default=2.0, type=float, help="Temperature parameter for DWA")
+    # 损失加权设置
+    parser.add_argument("--depth-loss-weight", default=1.0, type=float,
+                        help="Base depth loss multiplier used when computing UWL weights")
+    parser.add_argument("--seg-loss-weight", default=1.0, type=float,
+                        help="Base segmentation loss multiplier used when computing UWL weights")
     parser.add_argument("--camera-loss-weight", default=1.0, type=float,
                         help="Weight applied to camera intrinsics L1 loss when camera head is enabled.")
+    parser.add_argument("--disable-seg-head", action="store_true",
+                        help="Disable segmentation head entirely (depth-only training/inference)")
     
     # 数据参数
     parser.add_argument("--img-size", default=518, type=int)
@@ -195,6 +211,8 @@ def create_parser() -> argparse.ArgumentParser:
                         help="Stride for epoch-cycling sampling. Values >1 will iterate indices [offset, offset+step, ...] per epoch.")
     parser.add_argument("--val-sample-step", type=int, default=1,
                         help="Stride for validation sampling (e.g., 20 keeps every 20th sample).")
+    parser.add_argument("--val-min-samples-per-dataset", type=int, default=0,
+                        help="Minimum number of samples to keep per validation dataset. When set and step is too large or -1, samples are evenly spaced.")
     parser.add_argument("--dataset-modality",
                         default="mt",
                         choices=["mt", "fd"],
@@ -234,26 +252,13 @@ def create_parser() -> argparse.ArgumentParser:
 def args_to_config(args: argparse.Namespace) -> TrainingConfig:
     """将argparse.Namespace转换为TrainingConfig"""
 
-    # 根据mode参数设置use_lora和use_moe
+    # 根据mode参数设置use_lora（MoE 模式已移除）
     mode = getattr(args, 'mode', 'original')
-    if mode == 'endo-unid':
+    if mode in ('endo-unid', 'lora-only', 'legacy-lora'):
         use_lora = True
-        use_moe = False
-    elif mode == 'lora-only':
-        use_lora = True
-        use_moe = False
-    elif mode == 'legacy-lora':
-        use_lora = True
-        use_moe = False
-    elif mode == 'moe-only':
+    else:
         use_lora = False
-        use_moe = True
-    elif mode == 'lora-moe':
-        use_lora = True
-        use_moe = True
-    else:  # original
-        use_lora = False
-        use_moe = False
+    use_moe = False
 
     def _parse_list(value: Optional[str]) -> Optional[List[str]]:
         if not value:
@@ -271,8 +276,12 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           max_depth=getattr(args, 'max_depth', 0.2),
                           frozen_backbone=getattr(args, 'frozen_backbone', False),
                           seg_input_type=getattr(args, 'seg_input_type', "last_four"),
+                          seg_head_type=getattr(args, 'seg_head_type', "linear"),
+                          seg_head_type=getattr(args, 'seg_head_type', "linear"),
                           camera_head_mode=getattr(args, 'camera_head_mode', "none").lower(),
                           camera_loss_type=getattr(args, 'camera_loss_type', "l1").lower(),
+                          camera_backbone_loss_scale=getattr(args, 'camera_backbone_loss_scale', 1.0),
+                          camera_head_loss_scale=getattr(args, 'camera_head_loss_scale', 1.0),
                           mode=mode,
                           use_lora=use_lora,
                           use_moe=use_moe,
@@ -293,17 +302,17 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           val_interval=getattr(args, 'val_interval', 1),
                           save_interval=getattr(args, 'save_interval', 1),
                           massive_checkpoint=getattr(args, 'massive_checkpoint', False),
-                          loss_weighting_strategy=getattr(args, 'loss_weighting_strategy', 'fixed'),
                           depth_loss_weight=getattr(args, 'depth_loss_weight', 1.0),
                           seg_loss_weight=getattr(args, 'seg_loss_weight', 1.0),
-                          dwa_temperature=getattr(args, 'dwa_temperature', 2.0),
                           camera_loss_weight=getattr(args, 'camera_loss_weight', 1.0),
+                          disable_seg_head=getattr(args, 'disable_seg_head', False),
                           img_size=getattr(args, 'img_size', 518),
                           dataset_config_name=getattr(args, 'dataset_config_name', 'server_hk_01'),
                           path_transform_name=getattr(args, 'path_transform_name', 'sz_to_hk'),
                           max_samples_per_dataset=getattr(args, 'max_samples_per_dataset', None),
                           train_sample_step=getattr(args, 'train_sample_step', 1),
                           val_sample_step=getattr(args, 'val_sample_step', 1),
+                          val_min_samples_per_dataset=getattr(args, 'val_min_samples_per_dataset', 0),
                           dataset_modality=getattr(args, 'dataset_modality', 'mt'),
                           train_dataset_include=train_include_list,
                           val_dataset_include=val_include_list,
@@ -356,6 +365,8 @@ def validate_config(config: TrainingConfig) -> List[str]:
         errors.append("min_depth must be positive")
     if config.max_depth <= config.min_depth:
         errors.append("max_depth must be greater than min_depth")
+    if config.val_min_samples_per_dataset < 0:
+        errors.append("val_min_samples_per_dataset must be >= 0")
 
     # 检查seg_bs的合理性
     if config.seg_bs is not None and config.seg_bs <= 0:
@@ -365,10 +376,16 @@ def validate_config(config: TrainingConfig) -> List[str]:
         errors.append("max_samples_per_dataset must be positive if specified")
     if config.train_sample_step <= 0:
         errors.append("train_sample_step must be positive")
-    if config.val_sample_step <= 0:
-        errors.append("val_sample_step must be positive")
+    if config.val_sample_step == 0:
+        errors.append("val_sample_step must be positive or -1")
+    if config.val_sample_step < -1:
+        errors.append("val_sample_step must be >= -1")
     if config.camera_loss_weight < 0:
         errors.append("camera_loss_weight must be non-negative")
+    if config.camera_backbone_loss_scale < 0:
+        errors.append("camera_backbone_loss_scale must be non-negative")
+    if config.camera_head_loss_scale < 0:
+        errors.append("camera_head_loss_scale must be non-negative")
 
     # 检查encoder和seg_input_type的兼容性
     if config.seg_input_type == "from_depth" and config.frozen_backbone:

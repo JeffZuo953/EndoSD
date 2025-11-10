@@ -3,9 +3,8 @@
 Plot violin and box plots for depth distributions reconstructed from histogram CSVs.
 
 The script samples synthetic depth values from per-dataset histograms to avoid
-loading the original tensors. Dataset selection is configurable via --datasets;
-valid names: EndoMapper, EndoNeRF, EndoVis2017, EndoVis2018, EndoVis2018_train,
-EndoVis2018_val, SCARED, StereoMIS, C3VD, C3VDv2, Kidney3D, SimCol, dVPN, hamlyn.
+loading the original tensors. Dataset selection is configurable via --datasets and
+is derived at runtime from the available CSV files.
 """
 
 from __future__ import annotations
@@ -21,30 +20,7 @@ import numpy as np
 
 HIST_STEP_DEFAULT = 0.005
 SAMPLES_PER_DATASET = 5000
-DISPLAY_ALIASES = {
-    "EndoVis2018_train": "EndoVis2018",
-    "EndoVis2018_val": "EndoVis2018",
-}
-RAW_DATASET_NAMES = [
-    "C3VD",
-    "C3VDv2",
-    "EndoMapper",
-    "EndoNeRF",
-    "EndoVis2017",
-    "EndoVis2018_train",
-    "EndoVis2018_val",
-    "Kidney3D",
-    "SCARED",
-    "SimCol",
-    "StereoMIS",
-    "dVPN",
-    "hamlyn",
-]
-DISPLAY_NAMES = sorted(
-    {DISPLAY_ALIASES.get(name, name) for name in RAW_DATASET_NAMES}
-    | set(DISPLAY_ALIASES.values())
-)
-ALL_DATASET_NAMES = sorted(set(RAW_DATASET_NAMES) | set(DISPLAY_NAMES))
+SUMMARY_FILENAME_DEFAULT = "depth_summary_stats.csv"
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,13 +40,16 @@ def parse_args() -> argparse.Namespace:
         help="Histogram CSV filename (within data-dir unless absolute).",
     )
     parser.add_argument(
+        "--summary",
+        type=str,
+        default=SUMMARY_FILENAME_DEFAULT,
+        help="Summary stats CSV filename (within data-dir unless absolute).",
+    )
+    parser.add_argument(
         "--datasets",
         type=str,
         action="append",
-        help=(
-            "Datasets to plot (comma-separated). "
-            f"Choices: {', '.join(ALL_DATASET_NAMES)}. Default: all."
-        ),
+        help="Datasets to plot (comma-separated). Default: all datasets in the CSVs.",
     )
     parser.add_argument(
         "--hist-step",
@@ -104,27 +83,55 @@ def resolve_path(base: Path, maybe_relative: str) -> Path:
     return path if path.is_absolute() else base / path
 
 
-def normalize_dataset_selection(raw: List[str] | None) -> List[str]:
+def gather_dataset_names(histogram_path: Path, summary_path: Path | None) -> List[str]:
+    if not histogram_path.exists():
+        raise FileNotFoundError(f"Histogram CSV not found: {histogram_path}")
+
+    ordered: List[str] = []
+    seen: set[str] = set()
+
+    def add_from_csv(path: Path) -> None:
+        with path.open("r", newline="") as f:
+            reader = csv.DictReader(f)
+            if "dataset" not in reader.fieldnames:
+                raise ValueError(f"'dataset' column missing from {path}")
+            for row in reader:
+                name = row["dataset"].strip()
+                if not name or name in seen:
+                    continue
+                ordered.append(name)
+                seen.add(name)
+
+    if summary_path:
+        if summary_path.exists():
+            add_from_csv(summary_path)
+        else:
+            print(f"Warning: Summary CSV not found: {summary_path}")
+
+    add_from_csv(histogram_path)
+    return ordered
+
+
+def normalize_dataset_selection(raw: List[str] | None, available: List[str]) -> List[str]:
+    if not available:
+        raise ValueError("No datasets discovered in the provided CSV files.")
     if not raw:
-        return list(DISPLAY_NAMES)
+        return list(available)
     selections: List[str] = []
     for chunk in raw:
         selections.extend([p.strip() for p in chunk.split(",") if p.strip()])
-    valid_inputs = set(ALL_DATASET_NAMES)
-    resolved: List[str] = []
+    valid_inputs = set(available)
+    seen = set()
+    ordered: List[str] = []
     for name in selections:
         if name not in valid_inputs:
             raise ValueError(
-                f"Unknown dataset '{name}'. Allowed names: {', '.join(ALL_DATASET_NAMES)}"
+                f"Unknown dataset '{name}'. Allowed names: {', '.join(available)}"
             )
-        resolved.append(DISPLAY_ALIASES.get(name, name))
-    # collapse duplicates while preserving order
-    seen = set()
-    ordered: List[str] = []
-    for name in resolved:
-        if name not in seen:
-            ordered.append(name)
-            seen.add(name)
+        if name in seen:
+            continue
+        ordered.append(name)
+        seen.add(name)
     return ordered
 
 
@@ -133,14 +140,16 @@ def load_histograms(
 ) -> Dict[str, Dict[str, np.ndarray]]:
     if not csv_path.exists():
         raise FileNotFoundError(f"Histogram CSV not found: {csv_path}")
+    if not selected:
+        return {}
 
     accumulators: Dict[str, defaultdict[int, int]] = {}
+    selected_set = set(selected)
     with csv_path.open("r", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            dataset_raw = row["dataset"]
-            dataset = DISPLAY_ALIASES.get(dataset_raw, dataset_raw)
-            if dataset not in selected:
+            dataset = row["dataset"].strip()
+            if dataset not in selected_set:
                 continue
             count = int(row["count"])
             if count <= 0:
@@ -187,14 +196,23 @@ def prepare_datasets(
     rng = np.random.default_rng(0)
     histograms = load_histograms(histogram_path, hist_step, selected)
     sampled: Dict[str, np.ndarray] = {}
-    for dataset in sorted(histograms.keys()):
-        entry = histograms[dataset]
+    missing: List[str] = []
+    for dataset in selected:
+        entry = histograms.get(dataset)
+        if entry is None:
+            missing.append(dataset)
+            continue
         data = sample_from_histogram(
             entry["starts"], entry["ends"], entry["counts"], hist_step, rng, max_samples
         )
         if data.size == 0:
             continue
         sampled[dataset] = data
+    if missing:
+        print(
+            "Warning: datasets not found in histogram CSV and skipped: "
+            + ", ".join(missing)
+        )
     return sampled
 
 
@@ -226,7 +244,12 @@ def plot_box(data: Dict[str, np.ndarray], output: Path) -> None:
     labels = list(data.keys())
     values = [data[label] for label in labels]
     fig, ax = plt.subplots(figsize=(max(8, len(labels) * 0.8), 6))
-    ax.boxplot(values, labels=labels, showmeans=True)
+    boxplot_kwargs = {"showmeans": True}
+    try:
+        # Matplotlib 3.9 renamed 'labels' to 'tick_labels'; prefer the new name if available.
+        ax.boxplot(values, tick_labels=labels, **boxplot_kwargs)
+    except TypeError:
+        ax.boxplot(values, labels=labels, **boxplot_kwargs)
     ax.set_ylabel("Depth")
     ax.set_title("Depth Distribution Box Plot")
     ax.tick_params(axis="x", rotation=45)
@@ -240,9 +263,11 @@ def main() -> None:
     args = parse_args()
     data_dir = args.data_dir
     histogram_path = resolve_path(data_dir, args.histogram)
+    summary_path = resolve_path(data_dir, args.summary) if args.summary else None
     violin_path = resolve_path(data_dir, args.violin_output)
     box_path = resolve_path(data_dir, args.box_output)
-    selected = normalize_dataset_selection(args.datasets)
+    available_datasets = gather_dataset_names(histogram_path, summary_path)
+    selected = normalize_dataset_selection(args.datasets, available_datasets)
 
     data_dir.mkdir(parents=True, exist_ok=True)
     dataset_samples = prepare_datasets(

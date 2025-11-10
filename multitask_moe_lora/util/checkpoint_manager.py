@@ -100,13 +100,19 @@ class CheckpointManager:
         # 1. 保存最新的检查点
         self.save(epoch, "latest")
 
-        # 2. 如果启用，则保存每个epoch的检查点
-        if self.config.massive_checkpoint:
-            self.save(epoch, f"epoch_{epoch + 1}")
+        epoch_one_based = epoch + 1
 
-        # 2.1 每100个epoch保存一次完整检查点
-        if (epoch + 1) % 100 == 0:
-            self.save(epoch, f"full_epoch_{epoch + 1}")
+        save_epoch_snapshot = (
+            self.config.massive_checkpoint
+            or 45 <= epoch_one_based <= 55
+            or epoch_one_based % 10 == 0
+        )
+        if save_epoch_snapshot:
+            self.save(epoch, f"epoch_{epoch_one_based}")
+
+        # 2.3 每100个epoch保存一次完整检查点
+        if epoch_one_based % 100 == 0:
+            self.save(epoch, f"full_epoch_{epoch_one_based}")
 
         # 3. 基于指标的最佳检查点保存
         seg_metrics = seg_metrics or {}

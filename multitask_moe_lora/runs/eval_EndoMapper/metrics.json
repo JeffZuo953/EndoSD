@@ -1,0 +1,188 @@
+{
+  "overall": {
+    "d1": 0.00575935547704564,
+    "d2": 0.017425815275452384,
+    "d3": 0.04627258899243341,
+    "absrel": 5.934820425944264,
+    "sq_rel": 1.404876223010151,
+    "rmse": 0.2106323742288243,
+    "rmse_log": 1.8565167726520273,
+    "log10": 0.7589181777486369,
+    "silog": 1.385892983235196
+  },
+  "per_dataset": {
+    "EndoMapper": {
+      "d1": 0.00575935547704564,
+      "d2": 0.017425815275452384,
+      "d3": 0.04627258899243341,
+      "absrel": 5.934820425944264,
+      "sq_rel": 1.404876223010151,
+      "rmse": 0.2106323742288243,
+      "rmse_log": 1.8565167726520273,
+      "log10": 0.7589181777486369,
+      "silog": 1.385892983235196
+    }
+  },
+  "pred_stats": {
+    "count": 385688296,
+    "min": 0.013036650605499744,
+    "max": 0.29999038577079773,
+    "mean": 0.23419955182255842,
+    "std": 0.08553468072089242,
+    "bin_size": 0.01,
+    "hist_min": 0.0,
+    "hist_max": 0.3,
+    "histogram": [
+      {
+        "range_start": 0.0,
+        "range_end": 0.01,
+        "count": 0
+      },
+      {
+        "range_start": 0.01,
+        "range_end": 0.02,
+        "count": 180773
+      },
+      {
+        "range_start": 0.02,
+        "range_end": 0.03,
+        "count": 1925570
+      },
+      {
+        "range_start": 0.03,
+        "range_end": 0.04,
+        "count": 3013918
+      },
+      {
+        "range_start": 0.04,
+        "range_end": 0.05,
+        "count": 4305937
+      },
+      {
+        "range_start": 0.05,
+        "range_end": 0.06,
+        "count": 5396779
+      },
+      {
+        "range_start": 0.06,
+        "range_end": 0.07,
+        "count": 6906195
+      },
+      {
+        "range_start": 0.07,
+        "range_end": 0.08,
+        "count": 8629332
+      },
+      {
+        "range_start": 0.08,
+        "range_end": 0.09,
+        "count": 9297144
+      },
+      {
+        "range_start": 0.09,
+        "range_end": 0.1,
+        "count": 9865888
+      },
+      {
+        "range_start": 0.1,
+        "range_end": 0.11,
+        "count": 10206696
+      },
+      {
+        "range_start": 0.11,
+        "range_end": 0.12,
+        "count": 9238375
+      },
+      {
+        "range_start": 0.12,
+        "range_end": 0.13,
+        "count": 8094430
+      },
+      {
+        "range_start": 0.13,
+        "range_end": 0.14,
+        "count": 7228420
+      },
+      {
+        "range_start": 0.14,
+        "range_end": 0.15,
+        "count": 6544339
+      },
+      {
+        "range_start": 0.15,
+        "range_end": 0.16,
+        "count": 4390446
+      },
+      {
+        "range_start": 0.16,
+        "range_end": 0.17,
+        "count": 4515755
+      },
+      {
+        "range_start": 0.17,
+        "range_end": 0.18,
+        "count": 4369464
+      },
+      {
+        "range_start": 0.18,
+        "range_end": 0.19,
+        "count": 4354383
+      },
+      {
+        "range_start": 0.19,
+        "range_end": 0.2,
+        "count": 4446798
+      },
+      {
+        "range_start": 0.2,
+        "range_end": 0.21,
+        "count": 4592574
+      },
+      {
+        "range_start": 0.21,
+        "range_end": 0.22,
+        "count": 4938179
+      },
+      {
+        "range_start": 0.22,
+        "range_end": 0.23,
+        "count": 5403598
+      },
+      {
+        "range_start": 0.23,
+        "range_end": 0.24,
+        "count": 5919439
+      },
+      {
+        "range_start": 0.24,
+        "range_end": 0.25,
+        "count": 6847562
+      },
+      {
+        "range_start": 0.25,
+        "range_end": 0.26,
+        "count": 8261589
+      },
+      {
+        "range_start": 0.26,
+        "range_end": 0.27,
+        "count": 10482216
+      },
+      {
+        "range_start": 0.27,
+        "range_end": 0.28,
+        "count": 15212613
+      },
+      {
+        "range_start": 0.28,
+        "range_end": 0.29,
+        "count": 27521673
+      },
+      {
+        "range_start": 0.29,
+        "range_end": 0.3,
+        "count": 183598211
+      }
+    ]
+  }
+}

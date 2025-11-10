@@ -98,8 +98,22 @@ class DepthValidator:
         outputs = model(input_img, task='depth')
         pred = outputs['depth']
 
-        # 使用与原始模型完全一致的掩码逻辑
-        valid_mask_4d = (target_gt > 0) & (target_gt >= self.config.min_depth) & (target_gt <= self.config.max_depth)
+        # 先根据batch中提供的有效性掩码（优先 depth_valid_mask）构建基础掩码
+        base_mask: Optional[torch.Tensor] = None
+        if "depth_valid_mask" in batch:
+            base_mask = batch["depth_valid_mask"].cuda()
+        elif "valid_mask" in batch:
+            base_mask = batch["valid_mask"].cuda()
+
+        if base_mask is not None:
+            if base_mask.dim() == 2:
+                base_mask = base_mask.unsqueeze(0).unsqueeze(0)
+            elif base_mask.dim() == 3:
+                base_mask = base_mask.unsqueeze(1)
+            base_mask = base_mask.to(torch.bool)
+        # 使用与训练阶段一致的深度范围约束
+        range_mask = (target_gt > 0) & (target_gt >= self.config.min_depth) & (target_gt <= self.config.max_depth)
+        valid_mask_4d = range_mask if base_mask is None else (range_mask & base_mask)
         loss = self.criterion(pred, target_gt, valid_mask_4d)
 
         # 确保维度一致：pred是3D [B,H,W]，target_gt是4D [B,1,H,W]

@@ -13,8 +13,8 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=${NUM_GPUS:-6}
-CUDA_DEVICES=${CUDA_DEVICES:-"1,2,3,4,5,6"}
+NUM_GPUS=${NUM_GPUS:-5}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,3,4,5,6"}
 MASTER_PORT=${MASTER_PORT:-20863}
 
 # ------------------------------------------------------------------------------
@@ -32,16 +32,19 @@ MAX_DEPTH=${MAX_DEPTH:-0.3}
 MIN_DEPTH=${MIN_DEPTH:-1e-6}
 MIXED_PRECISION=${MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
+VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-100}
 # CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"vggtlike"}
 CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"none"}
 CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.0}
 CAMERA_LR=${CAMERA_LR:-1e-3}
 TOLERATE_VALIDATION_ERRORS=${TOLERATE_VALIDATION_ERRORS:-true}
 
-FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
+FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"sample"}   # full | sample
 FM_SAMPLE_SIZE=${FM_SAMPLE_SIZE:-10}
-TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
-VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-1}
+TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-200}
+# TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
+VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-20}
+# VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-1}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
 
 # ------------------------------------------------------------------------------
@@ -54,8 +57,8 @@ DATASET_MODALITY=${DATASET_MODALITY:-"fd"}       # depth-only foundation mode
 PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET}
 
-TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2018,dVPN,C3VDv2,SimCol,Kidney3D"}
-VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper"}
+TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,Endovis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,Endovis2017"}
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
@@ -109,16 +112,25 @@ else
 fi
 echo "  Sample mode:           ${FM_SAMPLE_MODE} (size=${FM_SAMPLE_SIZE})"
 echo "  Train sample step:     ${TRAIN_SAMPLE_STEP}"
+echo "  Val min samples:       ${VAL_MIN_SAMPLES_PER_DATASET}"
 echo "  Save path:             ${SAVE_PATH}"
 echo "=============================================================================="
 echo ""
 
 # ------------------------------------------------------------------------------
-# Sanity checks
+# Sanity checks / communication settings
 # ------------------------------------------------------------------------------
 if [[ -n "${CUDA_DEVICES}" ]]; then
     export CUDA_VISIBLE_DEVICES=${CUDA_DEVICES}
 fi
+
+NCCL_COMM_TIMEOUT=${NCCL_COMM_TIMEOUT:-1800}
+export NCCL_TIMEOUT=${NCCL_TIMEOUT:-$NCCL_COMM_TIMEOUT}
+export TORCH_NCCL_TIMEOUT=${TORCH_NCCL_TIMEOUT:-$NCCL_COMM_TIMEOUT}
+export NCCL_BLOCKING_WAIT=${NCCL_BLOCKING_WAIT:-1}
+export NCCL_ASYNC_ERROR_HANDLING=${NCCL_ASYNC_ERROR_HANDLING:-1}
+export TORCH_NCCL_BLOCKING_WAIT=${TORCH_NCCL_BLOCKING_WAIT:-$NCCL_BLOCKING_WAIT}
+export TORCH_NCCL_ASYNC_ERROR_HANDLING=${TORCH_NCCL_ASYNC_ERROR_HANDLING:-$NCCL_ASYNC_ERROR_HANDLING}
 
 if [[ -n "${PRETRAINED_WEIGHTS}" && ! -f "${PRETRAINED_WEIGHTS}" ]]; then
     echo "[WARN] Pretrained weights not found at ${PRETRAINED_WEIGHTS}, training will start from scratch."
@@ -160,6 +172,7 @@ BASE_CMD=(
     --path-transform-name "${PATH_TRANSFORM_NAME}"
     --train-sample-step "${TRAIN_SAMPLE_STEP}"
     --val-sample-step "${VAL_SAMPLE_STEP}"
+    --val-min-samples-per-dataset "${VAL_MIN_SAMPLES_PER_DATASET}"
     --mode original
     --save-path "${SAVE_PATH}"
     --camera-head-mode "${CAMERA_HEAD_MODE}"

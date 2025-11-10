@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 from typing import Callable, List, Optional, Set
@@ -12,6 +13,34 @@ from .utils import compute_valid_mask, map_ls_semseg_to_10_classes, map_semseg_t
 from ..util.local_cache import LocalCacheManager
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_SKIP_CAMERA = {"endosynth"}
+_env_skip = os.environ.get("SKIP_CAMERA_DATASETS", "")
+if _env_skip.strip():
+    _DEFAULT_SKIP_CAMERA.update(
+        name.strip().lower() for name in _env_skip.split(",") if name.strip()
+    )
+SKIP_CAMERA_DATASETS = frozenset(_DEFAULT_SKIP_CAMERA)
+
+
+def _resolve_progress_step(default: int = 3000) -> int:
+    env_value = os.environ.get("DATASET_PROGRESS_STEP", "").strip()
+    if env_value:
+        try:
+            step = int(env_value)
+            if step > 0:
+                return step
+            return 0
+        except ValueError:
+            return default
+    return default
+
+
+def _build_cache_namespace(prefix: str, dataset_name: str, filelist_path: str) -> str:
+    normalized = os.path.abspath(os.path.expanduser(filelist_path))
+    digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:8]
+    safe_name = (dataset_name or "dataset").strip().replace("/", "_")
+    return f"{prefix}/{safe_name}/{digest}"
 
 
 def generate_dataset_cache(dataset: Dataset, output_dir: str, filelist_name: str = "cache_files.txt", origin_prefix: str = "", cache_root_path: str = "") -> str:
@@ -124,31 +153,62 @@ class DepthCacheDataset(Dataset):
             dataset_type (str): 数据集的类型 ('kidney' or 'colon')，用于在验证时区分来源。
             path_transform (Callable[[str], str], optional): 一个函数，用于转换文件列表中的每个路径。默认为 None。
         """
-        if not os.path.exists(filelist_path):
-            raise FileNotFoundError(f"缓存文件列表不存在: {filelist_path}")
+        self.original_filelist_path = filelist_path
+        self.dataset_type = dataset_type
+        self.dataset_name = dataset_name or _infer_dataset_name_from_path(filelist_path)
+        cache_namespace = _build_cache_namespace("depth_cache", self.dataset_name, filelist_path)
+        self._local_cache = LocalCacheManager(local_cache_dir, namespace=cache_namespace)
+        self.local_filelist_path = None
 
-        with open(filelist_path, "r") as f:
+        candidate_filelist = filelist_path
+        if self._local_cache.enabled:
+            candidate = self._local_cache.filelist_mirror_path(filelist_path)
+            if candidate and os.path.exists(candidate):
+                candidate_filelist = candidate
+                self.local_filelist_path = candidate
+
+        if not os.path.exists(candidate_filelist):
+            raise FileNotFoundError(f"缓存文件列表不存在: {candidate_filelist}")
+
+        with open(candidate_filelist, "r") as f:
             raw_paths = [line.strip() for line in f if line.strip()]
 
         if path_transform:
             raw_paths = [path_transform(path) for path in raw_paths]
 
-        existing_paths: List[str] = []
-        missing_count = 0
-        for path in raw_paths:
-            if os.path.exists(path):
-                existing_paths.append(path)
-            else:
-                missing_count += 1
-        if missing_count > 0:
-            print(f"[DepthCacheDataset] Skipped {missing_count} missing cache files for {dataset_name or filelist_path}.")
-
-        self.filelist = existing_paths
-
-        self.dataset_type = dataset_type
-        self.dataset_name = dataset_name or _infer_dataset_name_from_path(filelist_path)
-        self._local_cache = LocalCacheManager(local_cache_dir, namespace=f"depth_cache/{self.dataset_name}")
+        expected_count = len(raw_paths)
+        if self._local_cache.enabled:
+            local_count = self._local_cache.namespace_file_count(suffix=".pt")
+            print(f"[DepthCacheDataset] {self.dataset_name}: txt={expected_count}, local_cache={local_count}")
+            if local_count != expected_count:
+                raise RuntimeError(
+                    f"[DepthCacheDataset] 本地缓存文件数量({local_count})与文件列表({expected_count})不一致: {self.dataset_name}. "
+                    "请先使用 warm_local_cache.py 同步缓存。"
+                )
+            self.filelist = raw_paths
+        else:
+            existing_paths: List[str] = []
+            missing_count = 0
+            for path in raw_paths:
+                if os.path.exists(path):
+                    existing_paths.append(path)
+                else:
+                    missing_count += 1
+            if missing_count > 0:
+                print(f"[DepthCacheDataset] Skipped {missing_count} missing cache files for {dataset_name or filelist_path}.")
+            self.filelist = existing_paths
+        self.dataset_name_lower = (self.dataset_name or "unknown").lower()
         self._missing_camera_datasets: Set[str] = set()
+        self.active_filelist_path = candidate_filelist
+        self._progress_step = _resolve_progress_step()
+        self._progress_counter = 0
+
+    def _log_progress(self):
+        if not self._progress_step:
+            return
+        self._progress_counter += 1
+        if self._progress_counter % self._progress_step == 0:
+            print(f"[DepthCacheDataset] {self.dataset_name}: processed {self._progress_counter} samples.")
 
     def __getitem__(self, item: int) -> dict:
         """
@@ -165,6 +225,7 @@ class DepthCacheDataset(Dataset):
         if self._local_cache.enabled:
             load_path = self._local_cache.ensure_copy(cache_path, cache_path)
         cached_data = torch.load(load_path, map_location="cpu")
+        self._log_progress()
         if 'c3vd' in cache_path:
             cached_data['max_depth'] = 0.1
         elif 'simcol' in cache_path:
@@ -300,13 +361,16 @@ class DepthCacheDataset(Dataset):
                 base_width = float(size_value[0])
                 base_height = float(size_value[1])
 
-        camera_info = get_camera_info(self.dataset_name or "", original_image_path)
+        dataset_key = self.dataset_name_lower
+        skip_camera = dataset_key in SKIP_CAMERA_DATASETS
+        camera_info = None
+        if not skip_camera:
+            camera_info = get_camera_info(self.dataset_name or "", original_image_path)
         if camera_info is None:
-            dataset_key = self.dataset_name or "unknown"
-            if dataset_key not in self._missing_camera_datasets:
+            if not skip_camera and dataset_key not in self._missing_camera_datasets:
                 logger.error(
                     "[DepthCacheDataset] Missing camera metadata for dataset '%s'; skipping camera intrinsics for %s.",
-                    dataset_key,
+                    self.dataset_name or "unknown",
                     original_image_path,
                 )
                 self._missing_camera_datasets.add(dataset_key)
@@ -360,19 +424,53 @@ class SegCacheDataset(Dataset):
             dataset_type (str): 数据集的类型 ('kidney' or 'colon')，用于在验证时区分来源。
             path_transform (Callable[[str], str], optional): 一个函数，用于转换文件列表中的每个路径。默认为 None。
         """
-        if not os.path.exists(filelist_path):
-            raise FileNotFoundError(f"缓存文件列表不存在: {filelist_path}")
-
-        with open(filelist_path, "r") as f:
-            self.filelist = f.read().splitlines()
-
-        if path_transform:
-            self.filelist = [path_transform(path) for path in self.filelist]
-
+        self.original_filelist_path = filelist_path
         self.dataset_type = dataset_type
         self.dataset_name = dataset_name or _infer_dataset_name_from_path(filelist_path)
+        cache_namespace = _build_cache_namespace("seg_cache", self.dataset_name, filelist_path)
+        self._local_cache = LocalCacheManager(local_cache_dir, namespace=cache_namespace)
+        self.local_filelist_path = None
+
+        candidate_filelist = filelist_path
+        if self._local_cache.enabled:
+            candidate = self._local_cache.filelist_mirror_path(filelist_path)
+            if candidate and os.path.exists(candidate):
+                candidate_filelist = candidate
+                self.local_filelist_path = candidate
+
+        if not os.path.exists(candidate_filelist):
+            raise FileNotFoundError(f"缓存文件列表不存在: {candidate_filelist}")
+
+        with open(candidate_filelist, "r") as f:
+            raw_paths = [line.strip() for line in f if line.strip()]
+
+        if path_transform:
+            raw_paths = [path_transform(path) for path in raw_paths]
+
+        expected_count = len(raw_paths)
+        if self._local_cache.enabled:
+            local_count = self._local_cache.namespace_file_count(suffix=".pt")
+            print(f"[SegCacheDataset] {self.dataset_name}: txt={expected_count}, local_cache={local_count}")
+            if local_count != expected_count:
+                raise RuntimeError(
+                    f"[SegCacheDataset] 本地缓存文件数量({local_count})与文件列表({expected_count})不一致: {self.dataset_name}. "
+                    "请先使用 warm_local_cache.py 同步缓存。"
+                )
+            self.filelist = raw_paths
+        else:
+            self.filelist = raw_paths
+
         self.label_mode = label_mode
-        self._local_cache = LocalCacheManager(local_cache_dir, namespace=f"seg_cache/{self.dataset_name}")
+        self.active_filelist_path = candidate_filelist
+        self._progress_step = _resolve_progress_step()
+        self._progress_counter = 0
+
+    def _log_progress(self):
+        if not self._progress_step:
+            return
+        self._progress_counter += 1
+        if self._progress_counter % self._progress_step == 0:
+            print(f"[SegCacheDataset] {self.dataset_name}: processed {self._progress_counter} samples.")
 
     def __getitem__(self, item: int) -> dict:
         """
@@ -390,6 +488,7 @@ class SegCacheDataset(Dataset):
             load_path = self._local_cache.ensure_copy(cache_path, cache_path)
         try:
             cached_data = torch.load(load_path, map_location="cpu")
+            self._log_progress()
             cached_data['source_type'] = self.dataset_type  # 添加数据源类型标识
             cached_data['dataset_name'] = self.dataset_name
 

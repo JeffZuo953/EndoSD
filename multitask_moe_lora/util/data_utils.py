@@ -8,10 +8,12 @@ import os
 import logging
 import math
 import copy
+from bisect import bisect_right
+from collections import defaultdict
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset as TorchDataset, Subset
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional
 from torch.utils.data import ConcatDataset
 
 from ..dataset.cache_utils import DepthCacheDataset, SegCacheDataset
@@ -105,6 +107,10 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     for item in batch:
         image = item["image"]
+        if torch.is_tensor(image):
+            torch.nan_to_num_(image, nan=0.0, posinf=0.0, neginf=0.0)
+            if image.dtype.is_floating_point:
+                image = image.clamp_(-10.0, 10.0)
         h, w = image.shape[-2:]
 
         pad_h = max_h - h
@@ -123,6 +129,9 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
         # 填充深度（如果存在）
         if "depth" in item:
             depth = item["depth"]
+            if torch.is_tensor(depth):
+                torch.nan_to_num_(depth, nan=0.0, posinf=0.0, neginf=0.0)
+                depth = depth.clamp_(min=0.0)
             if depth.dim() == 2:
                 depth = depth.unsqueeze(0)
             if depth.dim() == 3 and depth.shape[0] != 1:
@@ -473,14 +482,55 @@ def _create_dataset_or_none(factory, label: str):
         return None
 
 
-def _sample_dataset_by_step(dataset: Optional[TorchDataset], step: int) -> Optional[TorchDataset]:
-    if dataset is None or step is None or step <= 1:
+def _build_evenly_spaced_indices(dataset_len: int, target: int) -> List[int]:
+    if dataset_len <= 0 or target <= 0:
+        return []
+    if target >= dataset_len:
+        return list(range(dataset_len))
+    if target == 1:
+        return [0]
+    step = (dataset_len - 1) / float(target - 1)
+    indices: List[int] = []
+    for i in range(target):
+        idx = int(round(i * step))
+        idx = max(0, min(dataset_len - 1, idx))
+        if indices and idx <= indices[-1]:
+            idx = indices[-1] + 1
+        if idx >= dataset_len:
+            break
+        indices.append(idx)
+    if len(indices) < target:
+        stride = max(dataset_len // target, 1)
+        indices = list(range(0, dataset_len, stride))[:target]
+        next_idx = indices[-1] + 1 if indices else 0
+        while len(indices) < target and next_idx < dataset_len:
+            indices.append(next_idx)
+            next_idx += 1
+    return indices
+
+
+def _sample_dataset_by_step(dataset: Optional[TorchDataset], step: int, min_samples: int = 0) -> Optional[TorchDataset]:
+    if dataset is None:
         return dataset
     dataset_len = len(dataset)
     if dataset_len == 0:
         return dataset
-    indices = list(range(0, dataset_len, step))
-    if not indices:
+    min_samples = max(int(min_samples or 0), 0)
+    indices: List[int]
+    if step == -1:
+        if min_samples > 0:
+            indices = _build_evenly_spaced_indices(dataset_len, min(min_samples, dataset_len))
+        else:
+            indices = list(range(dataset_len))
+    elif step is None or step <= 1:
+        indices = list(range(dataset_len))
+    else:
+        indices = list(range(0, dataset_len, step))
+    if min_samples > 0:
+        target = min(min_samples, dataset_len)
+        if len(indices) < target:
+            indices = _build_evenly_spaced_indices(dataset_len, target)
+    if len(indices) == dataset_len:
         return dataset
     subset = Subset(dataset, indices)
     for attr in ('dataset_name', 'dataset_type'):
@@ -495,142 +545,6 @@ def _concat_datasets(datasets: List[TorchDataset], dataset_kind: str) -> TorchDa
     if len(datasets) == 1:
         return datasets[0]
     return ConcatDataset(datasets)
-
-DATASET_MODALITY_RULES: Dict[str, Dict[str, Dict[str, Set[str]]]] = {
-    "fd_depth": {
-        "fd": {
-            "depth": {
-                "SCARED",
-                "StereoMIS",
-                "dVPN",
-                "EndoVis2017",
-                "EndoVis2018",
-                "EndoSynth",
-                "C3VDv2",
-                "SimCol",
-                "Kidney3D",
-            },
-            "depth_val": {
-                "hamlyn",
-                "EndoNeRF",
-                "C3VD",
-                "EndoMapper",
-                "EndoSynth",
-            },
-            "seg": None,
-            "seg_val": None,
-        },
-    },
-    "ls": {
-        "mt": {
-            "depth": {"EndoSynth", "EndoVis2017", "EndoVis2018"},
-            "depth_val": {"EndoSynth", "EndoVis2017", "EndoVis2018"},
-            "seg": {"EndoSynth", "EndoVis2017", "EndoVis2018"},
-            "seg_val": {"EndoSynth", "EndoVis2017", "EndoVis2018"},
-        },
-        "fd": {
-            "depth": {"EndoSynth", "StereoMIS", "EndoVis2017", "EndoVis2018", "EndoNeRF", "SCARED"},
-            "depth_val": {"EndoSynth", "StereoMIS", "EndoVis2017", "EndoVis2018", "EndoNeRF", "hamlyn", "SCARED"},
-            "seg": None,
-        },
-    },
-    "no": {
-        "mt": {
-            "depth": {
-                "Kidney3D",
-                "RIRS-SegC",
-                "RIRS-SegP",
-                "clinicDB",
-                "CVC-EndoScene",
-                "Kvasir-SEG",
-                "bkai-igh-neopolyp",
-                "ETIS-LaribPolypDB",
-            },
-            "depth_val": {"Kidney3D"},
-            "seg": {
-                "Kidney3D",
-                "RIRS-SegC",
-                "RIRS-SegP",
-                "clinicDB",
-                "CVC-EndoScene",
-                "Kvasir-SEG",
-                "bkai-igh-neopolyp",
-                "ETIS-LaribPolypDB",
-            },
-            "seg_val": {"Kidney3D", "RIRS-SegC", "CVC-EndoScene", "Kvasir-SEG"},
-        },
-        "fd": {
-            "depth": {
-                "endomapper_sim",
-                "Kidney3D",
-                "c3vd",
-                "c3vdv2",
-                "SimCol",
-                "simcol",
-            },
-            "depth_val": {"Kidney3D"},
-            "seg": None,
-        },
-    },
-    "no_ls": {
-        "mt": {
-            "depth": {
-                "endomapper_sim",
-                "Kidney3D",
-                "StereoMIS",
-                "EndoVis2017",
-                "EndoVis2018",
-                "EndoSynth",
-                "EndoNeRF",
-            },
-            "depth_val": {
-                "endomapper_sim",
-                "Kidney3D",
-                "StereoMIS",
-                "EndoVis2017",
-                "EndoVis2018",
-                "EndoSynth",
-                "EndoNeRF",
-            },
-            "seg": {
-                "Kidney3D",
-                "RIRS-SegP",
-                "RIRS-SegC",
-                "clinicDB",
-                "CVC-EndoScene",
-                "Kvasir-SEG",
-                "bkai-igh-neopolyp",
-                "EndoVis2017",
-                "EndoVis2018",
-                "EndoSynth",
-                "EndoNeRF",
-            },
-            "seg_val": {
-                "Kidney3D",
-                "RIRS-SegC",
-                "CVC-EndoScene",
-                "Kvasir-SEG",
-                "EndoVis2017",
-                "EndoVis2018",
-                "EndoSynth",
-                "EndoNeRF",
-            },
-        },
-    },
-}
-
-
-def _detect_domain_from_config(config_name: str) -> Optional[str]:
-    name_lower = config_name.lower()
-    if "fd_depth" in name_lower:
-        return "fd_depth"
-    if "no_ls" in name_lower:
-        return "no_ls"
-    if "ls" in name_lower and "no" not in name_lower:
-        return "ls"
-    if "no" in name_lower and "ls" not in name_lower:
-        return "no"
-    return None
 
 
 def _get_dataset_name(ds: TorchDataset) -> Optional[str]:
@@ -675,40 +589,34 @@ def _infer_dataset_name(path: str) -> str:
     return "dataset"
 
 
-def _apply_modality_filter(datasets: List[TorchDataset],
-                           allowed_names: Optional[Set[str]],
-                           dataset_kind: str) -> List[TorchDataset]:
-    if not datasets or not allowed_names:
-        return datasets
-    filtered: List[TorchDataset] = []
-    for ds in datasets:
-        name = _get_dataset_name(ds)
-        base_name = str(name).split('[')[0] if name else None
-        if base_name in allowed_names:
-            filtered.append(ds)
-        else:
-            logging.debug("Filtering dataset '%s' out of %s due to modality rule.", name, dataset_kind)
-    if not filtered:
-        raise ValueError(f"No datasets remain for {dataset_kind} after applying modality filter {allowed_names}.")
-    return filtered
-
-
 def _apply_dataset_include(datasets: List[TorchDataset],
                            include_names: Optional[List[str]],
                            dataset_kind: str) -> List[TorchDataset]:
     if not datasets or not include_names:
         return datasets
-    include_set = {name.strip() for name in include_names if name.strip()}
+    include_list = [name.strip() for name in include_names if name and name.strip()]
+    if not include_list:
+        return datasets
+    include_lookup = {name.lower(): name for name in include_list}
+    available_name_map: Dict[str, str] = {}
     filtered: List[TorchDataset] = []
     for ds in datasets:
         name = _get_dataset_name(ds)
         base_name = str(name).split('[')[0] if name else None
-        if base_name in include_set:
+        if base_name:
+            available_name_map.setdefault(base_name.lower(), base_name)
+        if base_name and base_name.lower() in include_lookup:
             filtered.append(ds)
         else:
-            logging.debug("Filtering dataset '%s' out of %s due to include filter %s.", name, dataset_kind, include_set)
+            logging.debug("Filtering dataset '%s' out of %s due to include filter %s.", name, dataset_kind, include_list)
+    missing = [orig for lower, orig in include_lookup.items() if lower not in available_name_map]
+    if missing:
+        available = sorted(set(available_name_map.values()))
+        raise ValueError(
+            f"{dataset_kind} is missing datasets {missing}. Available datasets: {available or 'none'}."
+        )
     if not filtered:
-        raise ValueError(f"No datasets remain for {dataset_kind} after applying dataset include filter {include_set}.")
+        raise ValueError(f"No datasets remain for {dataset_kind} after applying dataset include filter {include_list}.")
     return filtered
 
 
@@ -730,7 +638,7 @@ def _normalize_size_pair(size_value, default_size):
     return default_size
 
 
-def _build_native_depth_dataset(entry: Dict[str, Any], img_size: int, default_max_depth: float) -> TorchDataset:
+def _build_native_depth_dataset(entry: Dict[str, Any], img_size: int, default_max_depth: float, local_cache_dir: Optional[str] = None) -> TorchDataset:
     dataset_key = entry.get("dataset")
     if not dataset_key:
         raise ValueError("Native dataset entry must include 'dataset' key.")
@@ -745,9 +653,11 @@ def _build_native_depth_dataset(entry: Dict[str, Any], img_size: int, default_ma
     dataset_key_lower = str(dataset_key).lower()
     if dataset_key_lower in {"stereomis", "stereo_mis"}:
         from ..dataset.stereo_mis import StereoMISDataset
+        params.setdefault("local_cache_dir", local_cache_dir)
         ds = StereoMISDataset(**params)
     elif dataset_key_lower == "hamlyn":
         from ..dataset.hamlyn import HamlynDataset
+        params.setdefault("local_cache_dir", local_cache_dir)
         ds = HamlynDataset(**params)
     else:
         raise ValueError(f"Unsupported native dataset '{dataset_key}'.")
@@ -770,6 +680,30 @@ def _flatten_dataset_parts(dataset: TorchDataset) -> List[Dict[str, Any]]:
 
     if isinstance(dataset, Subset):
         base = dataset.dataset
+        if isinstance(base, ConcatDataset):
+            # 统计 Subset 中每个子数据集被采样到的样本数量
+            counts: Dict[int, List[int]] = defaultdict(list)
+            cum_sizes = base.cumulative_sizes
+            for idx in dataset.indices:
+                ds_idx = bisect_right(cum_sizes, idx)
+                prev_cum = cum_sizes[ds_idx - 1] if ds_idx > 0 else 0
+                counts[ds_idx].append(idx - prev_cum)
+            for ds_idx, rel_indices in counts.items():
+                sub_dataset = base.datasets[ds_idx]
+                pseudo_subset = Subset(sub_dataset, rel_indices)
+                # 清晰标记当前子集抽取的样本数量，便于日志展示
+                base_name = getattr(sub_dataset, 'dataset_name', getattr(sub_dataset, 'dataset_type', sub_dataset.__class__.__name__))
+                setattr(pseudo_subset, 'dataset_name', f"{base_name}[:{len(rel_indices)}]")
+                setattr(pseudo_subset, 'dataset_type', getattr(sub_dataset, 'dataset_type', 'unknown'))
+                parts.extend(_flatten_dataset_parts(pseudo_subset))
+            return parts
+        if isinstance(base, Subset):
+            # 将索引映射回更底层的数据集，避免信息丢失
+            nested_indices = [base.indices[i] for i in dataset.indices]
+            pseudo_subset = Subset(base.dataset, nested_indices)
+            setattr(pseudo_subset, 'dataset_name', getattr(base, 'dataset_name', None))
+            setattr(pseudo_subset, 'dataset_type', getattr(base, 'dataset_type', None))
+            return _flatten_dataset_parts(pseudo_subset)
         base_name = getattr(base, 'dataset_name', getattr(base, 'dataset_type', base.__class__.__name__))
         parts.append({
             'name': getattr(dataset, 'dataset_name', f"{base_name}[:{len(dataset)}]"),
@@ -850,8 +784,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
 
     modality = getattr(config, "dataset_modality", "mt").lower()
     local_cache_dir = getattr(config, "local_cache_dir", None)
-    dataset_domain = _detect_domain_from_config(active_dataset)
-    modality_rule = DATASET_MODALITY_RULES.get(dataset_domain, {}).get(modality)
 
     DATASET_PATHS = {
         'server_sz': {
@@ -1474,7 +1406,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "EndoVis2018",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoSynth",
                 },
@@ -1520,11 +1452,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "EndoNeRF",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
                     "path": "/data/ziyi/multitask/data/NO/c3vd/cache/all_cache.txt",
                     "dataset_type": "NO",
                     "name": "C3VD",
@@ -1539,6 +1466,11 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
+                {
+                    "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
+                    "dataset_type": "NO",
+                    "name": "Kidney3D",
+                },
             ],
             "depth_val_filelists": [],
             "depth_val_native": [
@@ -1547,7 +1479,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "dataset_type": "LS",
                     "name": "hamlyn",
                     "params": {
-                        "filelist_path": "~/ssde/000/abdo/hamlyn_data/filelists/all.txt",
+                        "filelist_path": "~/ssde/000/abdo/hamlyn_data/filelists/eval.txt",
                         "rootpath": "~/ssde/000/abdo/hamlyn_data",
                         "mode": "eval",
                         "size": [518, 518],
@@ -1814,7 +1746,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
             train_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
         for entry in paths.get("depth_train_native", []):
             ds = _create_dataset_or_none(
-                lambda entry=entry: _build_native_depth_dataset(entry, config.img_size, config.max_depth),
+                lambda entry=entry: _build_native_depth_dataset(entry, config.img_size, config.max_depth, local_cache_dir),
                 entry.get("name") or entry.get("dataset", "native-depth-train"),
             )
             if ds is None:
@@ -1850,7 +1782,7 @@ def create_datasets(config: TrainingConfig) -> tuple:
             val_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
         for entry in paths.get("depth_val_native", []):
             ds = _create_dataset_or_none(
-                lambda entry=entry: _build_native_depth_dataset(entry, config.img_size, config.max_depth),
+                lambda entry=entry: _build_native_depth_dataset(entry, config.img_size, config.max_depth, local_cache_dir),
                 entry.get("name") or entry.get("dataset", "native-depth-val"),
             )
             if ds is None:
@@ -1859,13 +1791,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
 
         train_depth_parts = _apply_dataset_include(train_depth_parts, config.train_dataset_include, "depth-train")
         val_depth_parts = _apply_dataset_include(val_depth_parts, config.val_dataset_include, "depth-val")
-
-    if modality_rule:
-        allowed_depth_train = modality_rule.get("depth")
-        allowed_depth_val = modality_rule.get("depth_val", allowed_depth_train)
-        train_depth_parts = _apply_modality_filter(train_depth_parts, allowed_depth_train, "depth-train")
-        val_depth_parts = _apply_modality_filter(val_depth_parts, allowed_depth_val, "depth-val")
-
         train_depth_dataset = _concat_datasets(train_depth_parts, "depth-train")
         val_depth_dataset = _concat_datasets(val_depth_parts, "depth-val")
     else:
@@ -1894,10 +1819,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
         )
         if ds is not None:
             train_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
-        if modality_rule:
-            allowed_depth_train = modality_rule.get("depth")
-            allowed_depth_val = modality_rule.get("depth_val", allowed_depth_train)
-            train_depth_parts = _apply_modality_filter(train_depth_parts, allowed_depth_train, "depth-train")
 
         val_depth_parts = []
         ds = _create_dataset_or_none(
@@ -1926,8 +1847,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
             val_depth_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
         train_depth_parts = _apply_dataset_include(train_depth_parts, config.train_dataset_include, "depth-train")
         val_depth_parts = _apply_dataset_include(val_depth_parts, config.val_dataset_include, "depth-val")
-        if modality_rule:
-            val_depth_parts = _apply_modality_filter(val_depth_parts, allowed_depth_val, "depth-val")
         train_depth_dataset = _concat_datasets(train_depth_parts, "depth-train")
         val_depth_dataset = _concat_datasets(val_depth_parts, "depth-val")
 
@@ -2001,11 +1920,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 local_cache_dir=local_cache_dir,
             )
             val_seg_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
-        if modality_rule:
-            allowed_seg_train = modality_rule.get("seg")
-            allowed_seg_val = modality_rule.get("seg_val", allowed_seg_train)
-            train_seg_parts = _apply_modality_filter(train_seg_parts, allowed_seg_train, "seg-train")
-            val_seg_parts = _apply_modality_filter(val_seg_parts, allowed_seg_val, "seg-val")
         val_seg_parts = _apply_dataset_include(val_seg_parts, config.val_dataset_include, "seg-val")
         train_seg_dataset = _concat_datasets(train_seg_parts, "seg-train")
         val_seg_dataset = _concat_datasets(val_seg_parts, "seg-val")
@@ -2031,10 +1945,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
             )
             if ds is not None:
                 train_seg_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
-        if modality_rule:
-            allowed_seg_train = modality_rule.get("seg")
-            allowed_seg_val = modality_rule.get("seg_val", allowed_seg_train)
-            train_seg_parts = _apply_modality_filter(train_seg_parts, allowed_seg_train, "seg-train")
 
         val_seg_parts = []
         for key, dtype in [
@@ -2055,8 +1965,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
             )
             if ds is not None:
                 val_seg_parts.append(_limit_dataset(ds, config.max_samples_per_dataset))
-        if modality_rule:
-            val_seg_parts = _apply_modality_filter(val_seg_parts, allowed_seg_val, "seg-val")
         train_seg_parts = _apply_dataset_include(train_seg_parts, config.train_dataset_include, "seg-train")
         val_seg_parts = _apply_dataset_include(val_seg_parts, config.val_dataset_include, "seg-val")
         train_seg_dataset = _concat_datasets(train_seg_parts, "seg-train")
@@ -2084,9 +1992,11 @@ def create_dataloaders(config: TrainingConfig,
         (train_depth_loader, train_seg_loader, val_depth_loader, val_seg_loader)
     """
     # 在验证阶段按步长抽样
-    val_step = max(getattr(config, "val_sample_step", 1), 1)
-    val_depth_dataset = _sample_dataset_by_step(val_depth_dataset, val_step)
-    val_seg_dataset = _sample_dataset_by_step(val_seg_dataset, val_step)
+    raw_val_step = getattr(config, "val_sample_step", 1)
+    val_step = raw_val_step if raw_val_step == -1 else max(raw_val_step, 1)
+    val_min_samples = max(int(getattr(config, "val_min_samples_per_dataset", 0) or 0), 0)
+    val_depth_dataset = _sample_dataset_by_step(val_depth_dataset, val_step, val_min_samples)
+    val_seg_dataset = _sample_dataset_by_step(val_seg_dataset, val_step, val_min_samples)
 
     # 为每个任务创建分布式采样器
     if train_depth_dataset is not None:

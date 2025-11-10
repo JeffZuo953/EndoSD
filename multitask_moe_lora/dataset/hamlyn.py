@@ -13,6 +13,7 @@ from torchvision.transforms import Compose
 from .camera_utils import get_camera_info
 from .transform import NormalizeImage, PrepareForNet, Resize
 from .utils import compute_valid_mask
+from ..util.local_cache import LocalCacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class HamlynDataset(Dataset):
         image_ext: str = ".jpg",
         depth_ext: str = ".png",
         depth_scale: float = 1000.0,
+        local_cache_dir: Optional[str] = None,
     ) -> None:
         self.rootpath: str = os.path.abspath(os.path.expanduser(rootpath))
         self.mode: str = mode
@@ -78,6 +80,7 @@ class HamlynDataset(Dataset):
         self._intrinsics_cache: Dict[str, torch.Tensor] = {}
         self._intrinsics_cache_dirty: bool = False
         self._missing_intrinsics: set[str] = set()
+        self._cache = LocalCacheManager(local_cache_dir, namespace="native/Hamlyn")
 
         with open(filelist_path, "r") as f:
             self.filelist: List[str] = [line.strip() for line in f if line.strip()]
@@ -133,6 +136,9 @@ class HamlynDataset(Dataset):
             base_path = assets.base_path.as_posix()
 
         image_path, depth_path = self._resolve_frame_paths(assets, frame_id)
+        if self._cache.enabled:
+            image_path = self._ensure_local_asset("image", image_path)
+            depth_path = self._ensure_local_asset("depth", depth_path)
 
         raw_image = cv2.imread(image_path, cv2.IMREAD_COLOR)
         if raw_image is None:
@@ -184,6 +190,12 @@ class HamlynDataset(Dataset):
         result["dataset_name"] = "hamlyn"
 
         return result
+
+    def _ensure_local_asset(self, kind: str, path: str) -> str:
+        if not self._cache.enabled:
+            return path
+        key = f"{kind}|{path}"
+        return self._cache.ensure_copy(key, path)
 
     def _get_sequence_assets(self, base_path_str: str) -> SequenceAssets:
         if base_path_str in self._sequence_cache:

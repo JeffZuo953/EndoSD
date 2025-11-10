@@ -54,7 +54,7 @@ def remap_checkpoint_keys(state_dict: Dict[str, Any], model: torch.nn.Module, co
 
         # --- 2. Add 'backbone.' prefix if it's a backbone key ---
         # Heuristic: if it's not a head key, it's likely a backbone key.
-        if not (target_k.startswith('depth_head.') or target_k.startswith('seg_head.')):
+        if not (target_k.startswith('depth_head.') or target_k.startswith('seg_head.') or target_k.startswith('camera_head.')):
              # Re-add backbone prefix if it's not already there
             if not target_k.startswith('backbone.'):
                 base_key = target_k

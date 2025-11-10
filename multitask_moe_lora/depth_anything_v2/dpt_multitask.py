@@ -16,6 +16,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from seg_heads.linear_head.linear_head import LinearBNHead
+from seg_heads.segformer_head.segformer_head import SegFormerHead
 
 
 class DepthAnythingV2_MultiTask(nn.Module):
@@ -33,9 +34,10 @@ class DepthAnythingV2_MultiTask(nn.Module):
                  use_clstoken=False,
                  max_depth=20.0,
                  seg_input_type='last_four',
+                 seg_head_type='linear',
                  dinov3_repo_path='/media/ExtHDD1/jianfu/depth/DepthAnythingV2/dinov3',
                  pretrained_weights_path='',
-                 mode='original',  # 可选择: "original", "lora-only", "moe-only", "lora-moe"
+                 mode='original',  # 可选择: "original", "lora-only", "legacy-lora", "endo-unid"
                  num_experts: int = 8,
                  top_k: int = 2,
                  lora_r: int = 4,
@@ -49,6 +51,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
         self.num_classes = num_classes
         self.max_depth = max_depth
         self.seg_input_type = seg_input_type
+        self.seg_head_type = (seg_head_type or "linear").lower()
         self.mode = mode
         self.camera_head_mode = camera_head_mode.lower()
         self.endo_unid_params = endo_unid_params or {}
@@ -57,8 +60,8 @@ class DepthAnythingV2_MultiTask(nn.Module):
             raise ValueError("EndoUniD mode currently only supports vits or vitb encoders")
 
         # 根据mode参数解耦为内部参数
-        self.use_lora = mode in ['lora-only', 'legacy-lora', 'lora-moe', 'endo-unid']
-        self.use_moe = mode in ['moe-only', 'lora-moe']
+        self.use_lora = mode in ['lora-only', 'legacy-lora', 'endo-unid']
+        self.use_moe = False
         self.attention_only_lora = mode == 'legacy-lora'
 
         # 深度任务使用指定的layers (适配各模型的实际层数)
@@ -113,6 +116,11 @@ class DepthAnythingV2_MultiTask(nn.Module):
         else:
             raise ValueError(f"Unknown seg_input_type: {self.seg_input_type}")
 
+        if self.seg_head_type not in {"linear", "sf"}:
+            raise ValueError(f"Unsupported seg_head_type: {self.seg_head_type}")
+        # 新的语义头共享与深度头相同的层索引，便于特征对齐
+        self.seg_layer_idx = self.depth_layer_idx[self.encoder]
+
         if self.endo_unid_enabled:
             self.endo_unid_cfg = self._build_endo_unid_cfg()
         else:
@@ -155,8 +163,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
         logger = logging.getLogger("dinov2_dpt")
         logger.info(
             f"[dpt_multitask.py] Mode: {mode}, use_lora: {self.use_lora},"
-            f" attention_only_lora: {self.attention_only_lora}, use_moe: {self.use_moe},"
-            f" num_experts={num_experts}, top_k={top_k}, lora_r={lora_r}, lora_alpha={lora_alpha}"
+            f" attention_only_lora: {self.attention_only_lora}, lora_r={lora_r}, lora_alpha={lora_alpha}"
         )
 
         if 'dinov3' in encoder:
@@ -198,7 +205,10 @@ class DepthAnythingV2_MultiTask(nn.Module):
         num_seg_layers = len(self.seg_layer_idx)
         seg_in_channels = [self.backbone.embed_dim] * num_seg_layers
 
-        self.seg_head = LinearBNHead(in_channels=seg_in_channels, channels=features, num_classes=num_classes, in_index=list(range(num_seg_layers)))
+        if self.seg_head_type == "linear":
+            self.seg_head = LinearBNHead(in_channels=seg_in_channels, channels=features, num_classes=num_classes, in_index=list(range(num_seg_layers)))
+        else:
+            self.seg_head = SegFormerHead(in_channels=seg_in_channels, embedding_dim=features, num_classes=num_classes, align_corners=False)
 
         camera_adapter_rank = self.endo_unid_params.get('camera_r', 0) if self.endo_unid_enabled else 0
         camera_adapter_alpha = self.endo_unid_params.get('camera_alpha', 1) if self.endo_unid_enabled else 1
@@ -267,25 +277,28 @@ class DepthAnythingV2_MultiTask(nn.Module):
         depth_pred = self.depth_head(features, patch_h, patch_w)
         return depth_pred
 
+    def _reshape_seg_inputs(self, features, patch_h: int, patch_w: int) -> List[torch.Tensor]:
+        reshaped = []
+        for feat in features:
+            if isinstance(feat, tuple):
+                feat = feat[0]
+            if feat.dim() != 3:
+                reshaped.append(torch.nan_to_num(feat, nan=0.0).clamp_(-100.0, 100.0))
+                continue
+            b, _, c = feat.shape
+            tensor = feat.permute(0, 2, 1).reshape(b, c, patch_h, patch_w)
+            tensor = torch.nan_to_num(tensor, nan=0.0)
+            tensor = tensor.clamp_(-100.0, 100.0)
+            reshaped.append(tensor)
+        return reshaped
+
     def forward_segmentation(self, features, h, w):
         """
-        语义分割前向传播 (for non 'from_depth' modes)
+        语义分割前向传播
         """
         patch_size = self.get_patch_size()
-        # 使用向上取整以匹配前面可能的padding后产生的token网格
         patch_h, patch_w = math.ceil(h / patch_size), math.ceil(w / patch_size)
-
-        # Reshape features from (B, N, C) to (B, C, H, W)
-        reshaped_features = []
-        for x in features:
-            if len(x.shape) == 3:
-                b, _, c = x.shape
-                x = x.permute(0, 2, 1).reshape(b, c, patch_h, patch_w)
-            # 数值稳健性：清理中间特征中的 NaN/Inf
-            x = torch.nan_to_num(x, nan=0.0)
-            x = x.clamp_(-100.0, 100.0)
-            reshaped_features.append(x)
-
+        reshaped_features = self._reshape_seg_inputs(features, patch_h, patch_w)
         seg_pred = self.seg_head(reshaped_features)
         return seg_pred
 
@@ -435,6 +448,7 @@ class DepthAnythingV2_MultiTask_Frozen(DepthAnythingV2_MultiTask):
                  use_clstoken=False,
                  max_depth=20.0,
                  seg_input_type='last_four',
+                 seg_head_type='linear',
                  dinov3_repo_path='',
                  pretrained_weights_path='',
                  mode='original',
@@ -454,6 +468,7 @@ class DepthAnythingV2_MultiTask_Frozen(DepthAnythingV2_MultiTask):
             use_clstoken=use_clstoken,
             max_depth=max_depth,
             seg_input_type=seg_input_type,
+            seg_head_type=seg_head_type,
             dinov3_repo_path=dinov3_repo_path,
             pretrained_weights_path=pretrained_weights_path,
             mode=mode,
@@ -497,6 +512,7 @@ def create_multitask_model(encoder='vits',
                            max_depth=20.0,
                            frozen_backbone=False,
                            seg_input_type='last_four',
+                           seg_head_type='linear',
                            dinov3_repo_path='',
                            pretrained_weights_path='',
                            mode='original',
@@ -585,6 +601,7 @@ def create_multitask_model(encoder='vits',
         'dinov3_repo_path': dinov3_repo_path,
         'pretrained_weights_path': pretrained_weights_path,
         'mode': mode,
+        'seg_head_type': seg_head_type,
         'num_experts': num_experts,
         'top_k': top_k,
         'lora_r': lora_r,

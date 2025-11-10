@@ -273,7 +273,7 @@ def main():
     parser.add_argument("--dinov3-repo-path", type=str, default="/media/ExtHDD1/jianfu/depth/DepthAnythingV2/dinov3", help="Path to the local dinov3 repository")
     
     # PEFT Args
-    parser.add_argument("--mode", type=str, default="original", choices=["original", "lora-only", "moe-only", "lora-moe"], help="PEFT mode")
+    parser.add_argument("--mode", type=str, default="original", choices=["original", "lora-only", "legacy-lora"], help="PEFT mode")
     parser.add_argument("--num-experts", type=int, default=8, help="Number of experts for MoE")
     parser.add_argument("--top-k", type=int, default=2, help="Top-k routing for MoE")
     parser.add_argument("--lora-r", type=int, default=4, help="LoRA rank")

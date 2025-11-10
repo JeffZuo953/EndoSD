@@ -42,6 +42,8 @@ def load_weights_from_checkpoint(model: torch.nn.Module,
         state_dict = checkpoint['model_state_dict']
     elif 'model' in checkpoint:
         state_dict = checkpoint['model']
+    elif 'state_dict' in checkpoint:
+        state_dict = checkpoint['state_dict']
     else:
         state_dict = checkpoint
         
@@ -172,6 +174,7 @@ def create_and_setup_model(config: TrainingConfig, logger: logging.Logger) -> to
         max_depth=config.max_depth,
         frozen_backbone=config.frozen_backbone,
         seg_input_type=config.seg_input_type,
+        seg_head_type=getattr(config, "seg_head_type", "linear"),
         dinov3_repo_path=config.dinov3_repo_path,
         mode=config.mode,
         num_experts=config.num_experts,
@@ -273,6 +276,7 @@ def _validate_backbone_config(model: torch.nn.Module,
             max_depth=config.max_depth,
             frozen_backbone=False,
             seg_input_type=config.seg_input_type,
+            seg_head_type=getattr(config, "seg_head_type", "linear"),
             mode="original",  # 使用原始模式重新创建模型
             num_experts=config.num_experts,
             top_k=config.top_k,
@@ -396,6 +400,9 @@ def _validate_and_fix_seg_head(model: torch.nn.Module,
                               config: TrainingConfig, 
                               logger: logging.Logger) -> None:
     """验证和修复seg_head"""
+    if getattr(config, 'disable_seg_head', False):
+        logger.info("Seg head disabled via config; skipping seg_head validation.")
+        return
     actual_model = model.module if hasattr(model, 'module') else model
     # 显式重置seg_head中BatchNorm层的running_mean和running_var
     if hasattr(actual_model.seg_head, 'bn') and isinstance(actual_model.seg_head.bn, torch.nn.modules.batchnorm.SyncBatchNorm):
@@ -440,62 +447,16 @@ def setup_optimizers_and_schedulers(model: torch.nn.Module,
         "scheduler_unified": None,
     }
 
-    if config.loss_weighting_strategy == 'uwl':
-        logger.info("Using a unified optimizer for UWL strategy.")
-        trainable_params = list(filter(lambda p: p.requires_grad, model.parameters()))
+    logger.info("Using unified optimizer (UWL-only training).")
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    if getattr(loss_weighter, "log_vars", None) is not None:
         trainable_params.append(loss_weighter.log_vars)
 
-        optimizer = AdamW(trainable_params, lr=config.lr, weight_decay=config.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.epochs)
-        results["optimizer_unified"] = optimizer
-        results["scheduler_unified"] = scheduler
-        return results
-    else:
-        logger.info("Using separate optimizers for depth and segmentation heads.")
-        actual_model = model.module if hasattr(model, 'module') else model
-        trainable_params_depth = list(actual_model.depth_head.parameters())
-        trainable_params_seg = list(actual_model.seg_head.parameters())
-        camera_head = getattr(actual_model, "camera_head", None)
-        trainable_params_camera = []
-        if camera_head is not None:
-            trainable_params_camera = [p for p in camera_head.parameters() if p.requires_grad]
-
-        for name, param in actual_model.backbone.named_parameters():
-            if param.requires_grad:
-                trainable_params_depth.append(param)
-
-        # 为深度和分割头设置学习率，提供向后兼容性
-        # Learning rates: fallback to base when overrides are None
-        lr_depth_cfg = getattr(config, 'lr_depth', None)
-        lr_seg_cfg = getattr(config, 'lr_seg', None)
-        base_lr = float(getattr(config, 'lr', 1e-5))
-        lr_depth = float(lr_depth_cfg) if (lr_depth_cfg is not None) else base_lr
-        lr_seg = float(lr_seg_cfg) if (lr_seg_cfg is not None) else base_lr * 10.0
-        logger.info(f"Using LR for depth: {lr_depth}, LR for seg: {lr_seg}")
-
-        optimizer_depth = AdamW(trainable_params_depth, lr=lr_depth, weight_decay=config.weight_decay)
-        optimizer_seg = AdamW(trainable_params_seg, lr=lr_seg, weight_decay=config.weight_decay)
-
-        scheduler_depth = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_depth, T_max=config.epochs)
-        scheduler_seg = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_seg, T_max=config.epochs)
-        optimizer_camera = None
-        scheduler_camera = None
-        if trainable_params_camera:
-            lr_camera_cfg = getattr(config, 'lr_camera', None)
-            # 默认给相机头更高的学习率
-            default_camera_lr = base_lr * 50.0
-            lr_camera = float(lr_camera_cfg) if (lr_camera_cfg is not None) else default_camera_lr
-            logger.info(f"Using LR for camera head: {lr_camera}")
-            optimizer_camera = AdamW(trainable_params_camera, lr=lr_camera, weight_decay=config.weight_decay)
-            scheduler_camera = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_camera, T_max=config.epochs)
-
-        results["optimizer_depth"] = optimizer_depth
-        results["optimizer_seg"] = optimizer_seg
-        results["optimizer_camera"] = optimizer_camera
-        results["scheduler_depth"] = scheduler_depth
-        results["scheduler_seg"] = scheduler_seg
-        results["scheduler_camera"] = scheduler_camera
-        return results
+    optimizer = AdamW(trainable_params, lr=config.lr, weight_decay=config.weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.epochs)
+    results["optimizer_unified"] = optimizer
+    results["scheduler_unified"] = scheduler
+    return results
 
 
 def setup_complete_model(config: TrainingConfig, logger: logging.Logger):
@@ -504,6 +465,14 @@ def setup_complete_model(config: TrainingConfig, logger: logging.Logger):
     """
     # 创建并设置模型
     model = create_and_setup_model(config, logger)
+
+    if getattr(config, 'disable_seg_head', False):
+        actual_model = model.module if hasattr(model, 'module') else model
+        if hasattr(actual_model, 'seg_head'):
+            for param in actual_model.seg_head.parameters():
+                param.requires_grad = False
+            actual_model.seg_head.eval()
+            logger.info("Segmentation head disabled: parameters frozen and excluded from optimizer.")
     
     # 设置优化器和调度器
     from .loss_weighter import LossWeighter

@@ -1,2 +1,2 @@
 dataset,sampled_files,value_count,quantile_25,quantile_50,quantile_75,mean,variance
-EndoVis2018,2226,475414769,0.029836,0.037849,0.054772,0.047821,0.000722
+StereoMIS,500,106521387,0.074350,0.099302,0.119739,0.099005,0.001243

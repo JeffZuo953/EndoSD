@@ -45,6 +45,28 @@ Hamlyn Endo Depth and Motion 数据集的目录结构应该如下：
 
 每行格式：`<序列路径> <帧ID>`
 
+### 生成验证集 `eval.txt`
+
+`dataset/generate_hamlyn_filelist.py` 支持根据序列与子目录进行过滤。要将 `rectified01、rectified04、rectified19、rectified20` 中 `image01/depth01` 的数据写入 `eval.txt`，可以使用预设 `eval`：
+
+```bash
+python dataset/generate_hamlyn_filelist.py \
+    --base_dir /home/ziyi/ssde/000/abdo/hamlyn_data \
+    --output /home/ziyi/ssde/000/abdo/hamlyn_data/filelists/eval.txt \
+    --preset eval
+```
+
+等价地，也可以显式传入参数：
+
+```bash
+python dataset/generate_hamlyn_filelist.py \
+    --base_dir /home/ziyi/ssde/000/abdo/hamlyn_data \
+    --output /home/ziyi/ssde/000/abdo/hamlyn_data/filelists/eval.txt \
+    --sequences rectified01,rectified04,rectified19,rectified20 \
+    --image-subdirs image01 \
+    --depth-subdirs depth01
+```
+
 ## 生成缓存
 
 ### 步骤 1: 修改配置

@@ -3,7 +3,10 @@
 多任务训练器模块
 """
 
+import os
+from pathlib import Path
 import torch
+import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 import logging
@@ -61,6 +64,100 @@ class MultiTaskTrainer(BaseTrainer):
         self._latest_camera_loss: float = 0.0
         self._camera_eps = 1e-6
         self._camera_loss_type = getattr(self.config, 'camera_loss_type', 'l1').lower()
+        self._enable_nan_checks = bool(int(os.environ.get("DEPTHANYTHING_CHECK_NAN", "1")))
+        actual_model = self.model.module if hasattr(self.model, 'module') else self.model
+        camera_head = getattr(actual_model, "camera_head", None)
+        self._camera_head_params = [p for p in camera_head.parameters() if p.requires_grad] if camera_head is not None else []
+        base_camera_weight = float(getattr(self.config, 'camera_loss_weight', 0.0))
+        backbone_scale = float(getattr(self.config, 'camera_backbone_loss_scale', 1.0))
+        head_scale = float(getattr(self.config, 'camera_head_loss_scale', backbone_scale))
+        self._camera_backbone_weight = base_camera_weight * backbone_scale
+        self._camera_head_weight = base_camera_weight * head_scale
+        self._camera_grad_scale = 1.0
+        if self._camera_backbone_weight > 0 and self._camera_head_weight > 0:
+            self._camera_grad_scale = self._camera_head_weight / self._camera_backbone_weight
+        first_param = next((p for p in self.model.parameters() if p is not None), None)
+        self._primary_device = first_param.device if first_param is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._camera_debug_counts: Counter = Counter()
+        self._camera_issue_log_limit = 5
+        self._save_bad_batches = os.environ.get("FM_DEBUG_SAVE_BAD_BATCH", "0") == "1"
+        self._save_bad_snapshots = os.environ.get("FM_DEBUG_SAVE_BAD_SNAPSHOT", "0") == "1"
+        self._bad_batch_dir: Optional[Path] = None
+        self._last_depth_batch: Optional[Dict[str, Any]] = None
+        if self._save_bad_batches and self.rank == 0:
+            try:
+                self._bad_batch_dir = Path(self.config.save_path) / "debug_bad_batches"
+                self._bad_batch_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                self.logger.warning("Failed to prepare debug batch directory: %s", exc)
+                self._save_bad_batches = False
+        self._bad_snapshot_dir: Optional[Path] = None
+        if self._save_bad_snapshots and self.rank == 0:
+            try:
+                self._bad_snapshot_dir = Path(self.config.save_path) / "debug_bad_snapshots"
+                self._bad_snapshot_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                self.logger.warning("Failed to prepare debug snapshot directory: %s", exc)
+                self._save_bad_snapshots = False
+
+    def _describe_tensor(self, tensor: Optional[torch.Tensor], label: str) -> str:
+        if tensor is None:
+            return f"{label}:None"
+        try:
+            data = tensor.detach()
+        except Exception:
+            return f"{label}:unavailable"
+        finite_mask = torch.isfinite(data)
+        if not finite_mask.any():
+            return f"{label}:all_non_finite"
+        data = data[finite_mask]
+        return f"{label}:min={data.min().item():.6f},max={data.max().item():.6f},mean={data.mean().item():.6f}"
+
+    def _log_nan_debug(self,
+                       task: str,
+                       batch: Dict[str, Any],
+                       stage: str,
+                       loss_value: Optional[torch.Tensor],
+                       outputs: Optional[Dict[str, torch.Tensor]]) -> None:
+        if not self._enable_nan_checks:
+            return
+        dataset = batch.get("dataset_name")
+        if isinstance(dataset, (list, tuple)):
+            dataset = dataset[0] if dataset else None
+        source_type = batch.get("source_type")
+        if isinstance(source_type, (list, tuple)):
+            source_type = source_type[0] if source_type else None
+        msg = [f"[NaN-{stage}] task={task}", f"dataset={dataset}", f"source={source_type}"]
+        if loss_value is not None:
+            msg.append(self._describe_tensor(loss_value, "loss"))
+        depth_gt = batch.get("depth")
+        if torch.is_tensor(depth_gt):
+            msg.append(self._describe_tensor(depth_gt, "depth_gt"))
+        if outputs:
+            depth_pred = outputs.get("depth")
+            if depth_pred is not None:
+                msg.append(self._describe_tensor(depth_pred, "depth_pred"))
+            seg_pred = outputs.get("seg")
+            if seg_pred is not None:
+                msg.append(self._describe_tensor(seg_pred, "seg_pred"))
+            camera_pred = outputs.get("camera_intrinsics_norm")
+            if camera_pred is not None:
+                msg.append(self._describe_tensor(camera_pred, "camera_pred"))
+        self.logger.error(" | ".join(filter(None, msg)))
+
+    def _rescale_camera_head_grads(self, camera_loss_applied: bool) -> None:
+        if not camera_loss_applied:
+            return
+        if not self._camera_head_params:
+            return
+        scale = getattr(self, "_camera_grad_scale", 1.0)
+        if scale <= 0 or not math.isfinite(scale):
+            return
+        if math.isclose(scale, 1.0, rel_tol=1e-5, abs_tol=1e-7):
+            return
+        for param in self._camera_head_params:
+            if param.grad is not None:
+                param.grad.mul_(scale)
 
     @staticmethod
     def _select_primary_dataset(names: Optional[Any]) -> Optional[str]:
@@ -380,7 +477,7 @@ class MultiTaskTrainer(BaseTrainer):
         depth_tracker = self._build_progress_tracker(train_depth_loader) if train_depth_loader is not None else None
         seg_tracker = self._build_progress_tracker(train_seg_loader) if train_seg_loader is not None else None
 
-        if self.optimizer_unified and train_seg_loader is not None:
+        if self.optimizer_unified:
             avg_depth_loss, avg_seg_loss, avg_camera_loss = self._train_epoch_unified(
                 train_depth_loader, train_seg_loader, epoch, depth_tracker, seg_tracker
             )
@@ -391,162 +488,126 @@ class MultiTaskTrainer(BaseTrainer):
             else:
                 avg_seg_loss = 0.0
 
-        self.loss_weighter.update_weights(avg_depth_loss, avg_seg_loss)
         self._latest_camera_loss = avg_camera_loss
 
         if self.rank == 0:
-            self.writer.add_scalar("train/depth_loss", avg_depth_loss, epoch)
-            self.writer.add_scalar("train/seg_loss", avg_seg_loss, epoch)
-            if self.config.camera_head_mode.lower() != 'none':
-                self.writer.add_scalar("train/camera_loss", avg_camera_loss, epoch)
+            if self.writer is not None:
+                self.writer.add_scalar("train/depth_loss", avg_depth_loss, epoch)
+                if not getattr(self.config, "disable_seg_head", False):
+                    self.writer.add_scalar("train/seg_loss", avg_seg_loss, epoch)
+                if self.config.camera_head_mode.lower() != 'none':
+                    self.writer.add_scalar("train/camera_loss", avg_camera_loss, epoch)
 
-            # 记录损失权重
-            if self.loss_weighter.strategy == 'uwl':
-                bounds = getattr(self.loss_weighter, 'log_var_bounds', (-float('inf'), float('inf')))
-                clamp_enabled = all(map(math.isfinite, bounds))
+                if getattr(self.loss_weighter, "log_vars", None) is not None:
+                    bounds = getattr(self.loss_weighter, 'log_var_bounds', (-float('inf'), float('inf')))
+                    clamp_enabled = all(map(math.isfinite, bounds))
 
-                raw_log_var_depth = self.loss_weighter.log_vars[0].item()
-                raw_log_var_seg = self.loss_weighter.log_vars[1].item()
-                log_var_depth = max(bounds[0], min(bounds[1], raw_log_var_depth)) if clamp_enabled else raw_log_var_depth
-                log_var_seg = max(bounds[0], min(bounds[1], raw_log_var_seg)) if clamp_enabled else raw_log_var_seg
+                    raw_log_var_depth = self.loss_weighter.log_vars[0].item()
+                    raw_log_var_seg = self.loss_weighter.log_vars[1].item()
+                    log_var_depth = max(bounds[0], min(bounds[1], raw_log_var_depth)) if clamp_enabled else raw_log_var_depth
+                    log_var_seg = max(bounds[0], min(bounds[1], raw_log_var_seg)) if clamp_enabled else raw_log_var_seg
 
-                self.writer.add_scalar("train/uwl_log_var_depth", log_var_depth, epoch)
-                self.writer.add_scalar("train/uwl_log_var_seg", log_var_seg, epoch)
+                    self.writer.add_scalar("train/uwl_log_var_depth", log_var_depth, epoch)
+                    self.writer.add_scalar("train/uwl_log_var_seg", log_var_seg, epoch)
 
-                # 数值稳定：记录经过裁剪后的权重因子 exp(-log_var)
-                if clamp_enabled:
-                    weight_factor_depth = math.exp(-log_var_depth)
-                    weight_factor_seg = math.exp(-log_var_seg)
-                else:
-                    weight_factor_depth = torch.exp(-self.loss_weighter.log_vars[0]).item()
-                    weight_factor_seg = torch.exp(-self.loss_weighter.log_vars[1]).item()
+                    if clamp_enabled:
+                        weight_factor_depth = math.exp(-log_var_depth)
+                        weight_factor_seg = math.exp(-log_var_seg)
+                    else:
+                        weight_factor_depth = torch.exp(-self.loss_weighter.log_vars[0]).item()
+                        weight_factor_seg = torch.exp(-self.loss_weighter.log_vars[1]).item()
 
-                self.writer.add_scalar("train/weight_depth", weight_factor_depth, epoch)
-                self.writer.add_scalar("train/weight_seg", weight_factor_seg, epoch)
-
-            else:  # fixed 和 dwa
-                self.writer.add_scalar("train/weight_depth", self.config.depth_loss_weight, epoch)
-                self.writer.add_scalar("train/weight_seg", self.config.seg_loss_weight, epoch)
+                    self.writer.add_scalar("train/weight_depth", weight_factor_depth, epoch)
+                    if not getattr(self.config, "disable_seg_head", False):
+                        self.writer.add_scalar("train/weight_seg", weight_factor_seg, epoch)
 
             if self.config.camera_head_mode.lower() != 'none':
-                self.logger.info(
-                    f"Epoch {epoch} - Avg Depth Loss: {avg_depth_loss:.4f}, Avg Seg Loss: {avg_seg_loss:.4f}, "
-                    f"Avg Camera Loss: {avg_camera_loss:.4f}"
-                )
+                msg = f"Epoch {epoch} - Avg Depth Loss: {avg_depth_loss:.4f}"
+                if not getattr(self.config, "disable_seg_head", False):
+                    msg += f", Avg Seg Loss: {avg_seg_loss:.4f}"
+                msg += f", Avg Camera Loss: {avg_camera_loss:.4f}"
+                self.logger.info(msg)
             else:
-                self.logger.info(f"Epoch {epoch} - Avg Depth Loss: {avg_depth_loss:.4f}, Avg Seg Loss: {avg_seg_loss:.4f}")
+                if not getattr(self.config, "disable_seg_head", False):
+                    self.logger.info(f"Epoch {epoch} - Avg Depth Loss: {avg_depth_loss:.4f}, Avg Seg Loss: {avg_seg_loss:.4f}")
+                else:
+                    self.logger.info(f"Epoch {epoch} - Avg Depth Loss: {avg_depth_loss:.4f}")
 
         return avg_depth_loss, avg_seg_loss
 
+    def _record_camera_issue(self, reason: str, batch: Optional[Dict[str, Any]], extra: Optional[str] = None) -> None:
+        self._camera_debug_counts[reason] += 1
+        if self.rank != 0 or self._camera_debug_counts[reason] > self._camera_issue_log_limit:
+            return
+        dataset = None
+        if batch is not None:
+            dataset = batch.get("dataset_name")
+            if isinstance(dataset, (list, tuple)) and dataset:
+                dataset = dataset[0]
+        msg = f"[CameraDebug] reason={reason}"
+        if dataset:
+            msg += f", dataset={dataset}"
+        if extra:
+            msg += f", detail={extra}"
+        self.logger.warning(msg)
+
     def _train_epoch_unified(self,
                              train_depth_loader: DataLoader,
-                             train_seg_loader: DataLoader,
+                             train_seg_loader: Optional[DataLoader],
                              epoch: int,
                              depth_tracker: Optional[Dict[str, Any]],
                              seg_tracker: Optional[Dict[str, Any]]) -> tuple:
-        if train_depth_loader is None or train_seg_loader is None:
-            raise ValueError("Unified optimizer requires both depth and segmentation loaders.")
-        total_depth_loss, total_seg_loss = 0, 0
+        if train_depth_loader is None:
+            raise ValueError("Unified optimizer requires a depth dataloader.")
+
+        seg_enabled = train_seg_loader is not None and not getattr(self.config, "disable_seg_head", False)
+
+        total_depth_loss, total_seg_loss = 0.0, 0.0
         total_camera_loss = 0.0
         depth_batches, seg_batches, camera_batches = 0, 0, 0
 
-        len_depth = len(train_depth_loader)
-        len_seg = len(train_seg_loader)
-
-        # 使用itertools.cycle来处理不同长度的数据加载器，避免重新创建迭代器
-        if len_depth > len_seg:
-            long_loader, short_loader = train_depth_loader, train_seg_loader
-            is_depth_long = True
-        else:
-            long_loader, short_loader = train_seg_loader, train_depth_loader
-            is_depth_long = False
-
-        short_loader_iter = iter(cycle(short_loader))
-
-        for i, long_batch in enumerate(long_loader):
-            short_batch = next(short_loader_iter)
-
-            if is_depth_long:
-                batch_depth, batch_seg = long_batch, short_batch
-            else:
-                batch_depth, batch_seg = short_batch, long_batch
-
-            self.optimizer_unified.zero_grad()
-
-            self._log_dataset_progress("Train", "Depth", epoch, batch_depth.get("dataset_name"), depth_tracker)
-            # 深度任务
-            camera_loss = None
-            with autocast(enabled=self.config.mixed_precision, **self.autocast_kwargs):
-                img_depth = batch_depth["image"].cuda()
-                gt_depth = batch_depth["depth"].cuda()
-                outputs_depth = self.model(img_depth, task='depth')
-                pred_depth = outputs_depth['depth']
-                mask_depth = (gt_depth > 0) & (gt_depth >= self.config.min_depth) & (gt_depth <= self.config.max_depth)
-                loss_depth = self.depth_criterion(pred_depth, gt_depth, mask_depth)
-
-                if self.config.camera_head_mode.lower() != 'none' and 'camera_intrinsics_norm' in outputs_depth:
-                    camera_pred = outputs_depth['camera_intrinsics_norm']
-                    camera_batch = self._prepare_camera_targets(batch_depth, camera_pred)
-                    if camera_batch is not None:
-                        pred_aligned, gt_camera, camera_size = camera_batch
-                        camera_loss = self._compute_camera_loss(pred_aligned, gt_camera, camera_size)
-                        loss_depth = loss_depth + float(self.config.camera_loss_weight) * camera_loss
-
-                weighted_loss_depth = self.loss_weighter.get_loss(
-                    loss_depth, torch.tensor(0.0, device=loss_depth.device), task='depth'
-                )
-
-            # Backward for depth loss (AMP-safe)
-            if self.config.mixed_precision and self.scaler is not None:
-                self.scaler.scale(weighted_loss_depth).backward()
-            else:
-                weighted_loss_depth.backward()
-
-            self._log_dataset_progress("Train", "Seg", epoch, batch_seg.get("dataset_name"), seg_tracker)
-            # 分割任务
-            with autocast(enabled=self.config.mixed_precision, **self.autocast_kwargs):
-                img_seg = batch_seg["image"].cuda()
-                gt_seg = batch_seg["semseg_mask"].cuda().long()
-                pred_seg = self.model(img_seg, task='seg')['seg']
-
-                # 强化数值稳定性：先清理 NaN/Inf，再截断绝对值过大的 logits
-                pred_seg = torch.nan_to_num(pred_seg, nan=0.0)
-                pred_seg = pred_seg.clamp_(-100.0, 100.0)
-
-                # 若本批次没有任何有效标签（全部为ignore_index或越界），跳过损失以避免NaN
-                valid_mask = (gt_seg >= 0) & (gt_seg < self.config.num_classes)
-                valid_count = int(valid_mask.sum().item())
-                if valid_count == 0:
-                    loss_seg = (pred_seg.sum() * 0.0).to(pred_seg.dtype)
-                else:
-                    # 将越界标签设为ignore_index，保证CrossEntropyLoss稳定
-                    gt_seg = torch.where(valid_mask, gt_seg, torch.tensor(self.ignore_index, device=gt_seg.device))
-                    loss_seg = self.seg_criterion(pred_seg, gt_seg)
-                weighted_loss_seg = self.loss_weighter.get_loss(torch.tensor(0.0, device=loss_seg.device), loss_seg, task='seg')
-
-            # Backward for seg loss (AMP-safe)
-            if self.config.mixed_precision and self.scaler is not None:
-                self.scaler.scale(weighted_loss_seg).backward()
-            else:
-                weighted_loss_seg.backward()
-
-            # 统一更新：在AMP下先unscale，再裁剪；非AMP直接裁剪
+        def _step_optimizer(i: int) -> bool:
             if self.config.mixed_precision and self.scaler is not None:
                 self.scaler.unscale_(self.optimizer_unified)
 
-            # 梯度裁剪
             max_norm = getattr(self.config, 'clip_grad_norm', 1.0)
             params_to_clip = [p for p in self.model.parameters() if p.requires_grad]
-            if getattr(self.loss_weighter, 'strategy', None) == 'uwl':
+            if getattr(self.loss_weighter, "log_vars", None) is not None:
                 params_to_clip.append(self.loss_weighter.log_vars)
             torch.nn.utils.clip_grad_norm_(params_to_clip, max_norm=max_norm)
 
             named_params = list(self.model.named_parameters())
-            if getattr(self.loss_weighter, 'strategy', None) == 'uwl':
+            if getattr(self.loss_weighter, "log_vars", None) is not None:
                 named_params.append(("loss_weighter.log_vars", self.loss_weighter.log_vars))
             bad_params = self._sanitize_gradients(named_params)
-            if bad_params and self.rank == 0:
-                self.logger.debug(f"Sanitized non-finite gradients for: {bad_params}")
+            local_skip = bool(bad_params)
+            if local_skip and any("camera_head" in name for name in bad_params):
+                snippet = ", ".join(bad_params[:3])
+                self._record_camera_issue("camera_bad_grad", None, extra=snippet)
+            if local_skip and self.rank == 0:
+                self.logger.warning(
+                    f"Skipping optimizer step at epoch {epoch}, iter {i} due to non-finite gradients: {bad_params}"
+                )
+
+            skip_step = local_skip
+            if dist.is_initialized():
+                skip_tensor = torch.tensor(1 if skip_step else 0, device=self._primary_device)
+                dist.all_reduce(skip_tensor, op=dist.ReduceOp.MAX)
+                skip_step = bool(skip_tensor.item())
+            if skip_step and not local_skip:
+                self._record_camera_issue("external_bad_grad", None)
+
+            if skip_step:
+                if self.config.mixed_precision and self.scaler is not None:
+                    self.scaler.update()
+                self.optimizer_unified.zero_grad(set_to_none=True)
+                if getattr(self.loss_weighter, "log_vars", None) is not None and self.loss_weighter.log_vars.grad is not None:
+                    self.loss_weighter.log_vars.grad.zero_()
+                if self._save_bad_batches:
+                    self._dump_bad_batch(epoch, i, bad_params)
+                if self._save_bad_snapshots:
+                    self._dump_bad_snapshot(epoch, i)
+                return False
 
             if self.config.mixed_precision and self.scaler is not None:
                 self.scaler.step(self.optimizer_unified)
@@ -555,24 +616,153 @@ class MultiTaskTrainer(BaseTrainer):
             else:
                 self.optimizer_unified.step()
                 self.loss_weighter.sanitize_parameters()
+            return True
 
-            # Step-level UWL logging (compact, single call) and step increment
-            self._log_step_uwl()
-            self.global_step += 1
+        if seg_enabled:
+            len_depth = len(train_depth_loader)
+            len_seg = len(train_seg_loader)
+            if len_depth > len_seg:
+                long_loader, short_loader = train_depth_loader, train_seg_loader
+                is_depth_long = True
+            else:
+                long_loader, short_loader = train_seg_loader, train_depth_loader
+                is_depth_long = False
 
-            total_depth_loss += loss_depth.item()
-            total_seg_loss += loss_seg.item()
-            depth_batches += 1
-            seg_batches += 1
-            if camera_loss is not None:
-                total_camera_loss += camera_loss.item()
-                camera_batches += 1
+            short_loader_iter = iter(cycle(short_loader))
 
-        avg_depth_loss = total_depth_loss / depth_batches if depth_batches > 0 else 0
-        avg_seg_loss = total_seg_loss / seg_batches if seg_batches > 0 else 0
+            for i, long_batch in enumerate(long_loader):
+                batch_depth, batch_seg = (long_batch, next(short_loader_iter)) if is_depth_long else (next(short_loader_iter), long_batch)
+
+                self.optimizer_unified.zero_grad()
+                depth_stats = self._run_depth_step(batch_depth, depth_tracker, epoch)
+                loss_depth, weighted_loss_depth, camera_loss, camera_loss_applied = depth_stats
+
+                self._log_dataset_progress("Train", "Seg", epoch, batch_seg.get("dataset_name"), seg_tracker)
+                with autocast(enabled=self.config.mixed_precision, **self.autocast_kwargs):
+                    img_seg = batch_seg["image"].cuda()
+                    gt_seg = batch_seg["semseg_mask"].cuda().long()
+                    pred_seg = self.model(img_seg, task='seg')['seg']
+                    pred_seg = torch.nan_to_num(pred_seg, nan=0.0).clamp_(-100.0, 100.0)
+                    valid_mask = (gt_seg >= 0) & (gt_seg < self.config.num_classes)
+                    if int(valid_mask.sum().item()) == 0:
+                        loss_seg = (pred_seg.sum() * 0.0).to(pred_seg.dtype)
+                    else:
+                        gt_seg = torch.where(valid_mask, gt_seg, torch.tensor(self.ignore_index, device=gt_seg.device))
+                        loss_seg = self.seg_criterion(pred_seg, gt_seg)
+                    weighted_loss_seg = self.loss_weighter.get_loss(
+                        torch.tensor(0.0, device=loss_seg.device), loss_seg, task='seg')
+
+                self._backward_depth(weighted_loss_depth, camera_loss_applied)
+                if self.config.mixed_precision and self.scaler is not None:
+                    self.scaler.scale(weighted_loss_seg).backward()
+                else:
+                    weighted_loss_seg.backward()
+
+                total_depth_loss += loss_depth.item()
+                total_seg_loss += loss_seg.item()
+                depth_batches += 1
+                seg_batches += 1
+                if camera_loss is not None:
+                    total_camera_loss += camera_loss.item()
+                    camera_batches += 1
+
+                if not _step_optimizer(i):
+                    continue
+
+                self._log_step_uwl()
+                self.global_step += 1
+        else:
+            for i, batch_depth in enumerate(train_depth_loader):
+                self.optimizer_unified.zero_grad()
+                depth_stats = self._run_depth_step(batch_depth, depth_tracker, epoch)
+                loss_depth, weighted_loss_depth, camera_loss, camera_loss_applied = depth_stats
+                self._backward_depth(weighted_loss_depth, camera_loss_applied)
+
+                total_depth_loss += loss_depth.item()
+                depth_batches += 1
+                if camera_loss is not None:
+                    total_camera_loss += camera_loss.item()
+                    camera_batches += 1
+
+                if not _step_optimizer(i):
+                    continue
+
+                self._log_step_uwl()
+                self.global_step += 1
+
+        avg_depth_loss = total_depth_loss / depth_batches if depth_batches > 0 else 0.0
+        avg_seg_loss = total_seg_loss / seg_batches if seg_batches > 0 else 0.0
         avg_camera_loss = total_camera_loss / camera_batches if camera_batches > 0 else 0.0
-
         return avg_depth_loss, avg_seg_loss, avg_camera_loss
+
+    def _run_depth_step(self,
+                        batch_depth: Dict[str, Any],
+                        depth_tracker: Optional[Dict[str, Any]],
+                        epoch: int) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], bool]:
+        self._log_dataset_progress("Train", "Depth", epoch, batch_depth.get("dataset_name"), depth_tracker)
+        self._last_depth_batch = batch_depth
+        camera_loss = None
+        camera_loss_applied = False
+        min_depth_cfg = float(getattr(self.config, 'min_depth', 1e-6) or 1e-6)
+        max_depth_cfg = float(getattr(self.config, 'max_depth', 1.0) or 1.0)
+        with autocast(enabled=self.config.mixed_precision, **self.autocast_kwargs):
+            img_depth = batch_depth["image"].cuda()
+            torch.nan_to_num_(img_depth, nan=0.0, posinf=0.0, neginf=0.0)
+            if img_depth.dtype.is_floating_point:
+                img_depth = img_depth.clamp_(-10.0, 10.0)
+            raw_gt_depth = batch_depth["depth"].cuda()
+            gt_depth = torch.nan_to_num(raw_gt_depth, nan=0.0, posinf=max_depth_cfg, neginf=0.0)
+            gt_depth = gt_depth.clamp_(min=min_depth_cfg, max=max_depth_cfg)
+            outputs_depth = self.model(img_depth, task='depth')
+            pred_depth = outputs_depth['depth']
+            pred_depth = torch.nan_to_num(pred_depth, nan=0.0, posinf=max_depth_cfg * 1.25, neginf=0.0)
+            pred_depth = pred_depth.clamp_(min=min_depth_cfg * 0.5, max=max_depth_cfg * 1.25)
+            mask_depth = (gt_depth >= min_depth_cfg) & (gt_depth <= max_depth_cfg) & torch.isfinite(gt_depth)
+            valid_depth = int(mask_depth.sum().item())
+            if valid_depth == 0:
+                loss_depth = (pred_depth.sum() * 0.0).to(pred_depth.dtype)
+            else:
+                loss_depth = self.depth_criterion(pred_depth, gt_depth, mask_depth)
+
+            if self.config.camera_head_mode.lower() != 'none' and 'camera_intrinsics_norm' in outputs_depth:
+                camera_pred = outputs_depth['camera_intrinsics_norm']
+                camera_pred = torch.nan_to_num(camera_pred, nan=0.0, posinf=1.0, neginf=0.0)
+                camera_batch = self._prepare_camera_targets(batch_depth, camera_pred)
+                if camera_batch is None:
+                    self._record_camera_issue("missing_targets", batch_depth)
+                else:
+                    pred_aligned, gt_camera, camera_size = camera_batch
+                    camera_valid = True
+                    pred_aligned = torch.nan_to_num(pred_aligned, nan=0.0, posinf=1.0, neginf=0.0)
+                    gt_camera = torch.nan_to_num(gt_camera, nan=0.0, posinf=1.0, neginf=0.0)
+                    if not torch.isfinite(pred_aligned).all() or not torch.isfinite(gt_camera).all():
+                        camera_valid = False
+                        self._record_camera_issue("non_finite_tensor", batch_depth)
+                    if camera_size is not None and not torch.isfinite(camera_size).all():
+                        camera_valid = False
+                        self._record_camera_issue("non_finite_size", batch_depth)
+                    if camera_valid:
+                        camera_loss = self._compute_camera_loss(pred_aligned, gt_camera, camera_size)
+                        if not torch.isfinite(camera_loss):
+                            self._record_camera_issue("non_finite_loss", batch_depth)
+                            camera_loss = torch.tensor(0.0, device=pred_aligned.device)
+                        elif self._camera_backbone_weight > 0.0:
+                            loss_depth = loss_depth + self._camera_backbone_weight * camera_loss
+                            camera_loss_applied = True
+
+            weighted_loss_depth = self.loss_weighter.get_loss(
+                loss_depth, torch.tensor(0.0, device=loss_depth.device), task='depth'
+            )
+
+        return loss_depth, weighted_loss_depth, camera_loss, camera_loss_applied
+
+    def _backward_depth(self, weighted_loss_depth: torch.Tensor, camera_loss_applied: bool) -> None:
+        if self.config.mixed_precision and self.scaler is not None:
+            self.scaler.scale(weighted_loss_depth).backward()
+            self._rescale_camera_head_grads(camera_loss_applied)
+        else:
+            weighted_loss_depth.backward()
+            self._rescale_camera_head_grads(camera_loss_applied)
 
     def _sanitize_gradients(self, named_params):
         bad = []
@@ -583,6 +773,68 @@ class MultiTaskTrainer(BaseTrainer):
                 torch.nan_to_num_(param.grad, nan=0.0, posinf=0.0, neginf=0.0)
                 bad.append(name)
         return bad
+
+    def _snapshot_depth_batch(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+        snapshot: Dict[str, Any] = {}
+        tensor_keys = (
+            "image",
+            "depth",
+            "valid_mask",
+            "depth_valid_mask",
+            "semseg_mask",
+            "camera_intrinsics",
+            "camera_intrinsics_norm",
+            "camera_size",
+        )
+        meta_keys = (
+            "dataset_name",
+            "source_type",
+            "image_path",
+            "depth_path",
+            "camera_path",
+            "max_depth",
+        )
+        for key in tensor_keys:
+            value = batch.get(key)
+            if torch.is_tensor(value):
+                try:
+                    snapshot[key] = value.detach().cpu()
+                except Exception:
+                    pass
+        for key in meta_keys:
+            if key in batch:
+                snapshot[key] = batch[key]
+        return snapshot
+
+    def _dump_bad_batch(self, epoch: int, iteration: int, bad_params: Optional[Any]) -> None:
+        if not self._save_bad_batches or self.rank != 0 or self._bad_batch_dir is None:
+            return
+        batch = getattr(self, "_last_depth_batch", None)
+        if not isinstance(batch, dict):
+            return
+        snapshot = self._snapshot_depth_batch(batch)
+        snapshot["_meta"] = {
+            "epoch": epoch,
+            "iteration": iteration,
+            "bad_params": bad_params,
+        }
+        filename = f"bad_batch_e{epoch:03d}_i{iteration:05d}.pt"
+        try:
+            torch.save(snapshot, self._bad_batch_dir / filename)
+            self.logger.warning("Saved debug batch to %s", self._bad_batch_dir / filename)
+        except Exception as exc:
+            self.logger.warning("Failed to save debug batch: %s", exc)
+
+    def _dump_bad_snapshot(self, epoch: int, iteration: int) -> None:
+        if not self._save_bad_snapshots or self.rank != 0 or self._bad_snapshot_dir is None:
+            return
+        filename = f"bad_snapshot_e{epoch:03d}_i{iteration:05d}.pth"
+        try:
+            state_dict = self.model.state_dict()
+            torch.save({"state_dict": state_dict, "epoch": epoch, "iteration": iteration}, self._bad_snapshot_dir / filename)
+            self.logger.warning("Saved debug snapshot to %s", self._bad_snapshot_dir / filename)
+        except Exception as exc:
+            self.logger.warning("Failed to save debug snapshot: %s", exc)
 
     def _compute_camera_loss(self, camera_pred: torch.Tensor, camera_gt: torch.Tensor, camera_size: Optional[torch.Tensor]) -> torch.Tensor:
         if camera_size is not None:
@@ -629,7 +881,7 @@ class MultiTaskTrainer(BaseTrainer):
         """
         if self.rank != 0 or self.writer is None:
             return
-        if getattr(self.loss_weighter, 'strategy', None) != 'uwl':
+        if getattr(self.loss_weighter, "log_vars", None) is None:
             return
 
         try:
@@ -690,7 +942,9 @@ class MultiTaskTrainer(BaseTrainer):
             self._log_dataset_progress("Train", task_label, epoch, batch.get("dataset_name"), tracker)
 
             camera_loss = None
+            camera_loss_applied = False
             with autocast(enabled=self.config.mixed_precision, **self.autocast_kwargs):
+                outputs = None
                 if task == 'depth':
                     depth_gt = batch["depth"].cuda()
                     outputs = self.model(input_img, task='depth')
@@ -723,7 +977,9 @@ class MultiTaskTrainer(BaseTrainer):
                         if camera_batch is not None:
                             pred_aligned, gt_camera, camera_size = camera_batch
                             camera_loss = self._compute_camera_loss(pred_aligned, gt_camera, camera_size)
-                            loss = loss + float(self.config.camera_loss_weight) * camera_loss
+                            if self._camera_backbone_weight > 0.0:
+                                loss = loss + self._camera_backbone_weight * camera_loss
+                                camera_loss_applied = True
                 else:
                     seg_gt = batch["semseg_mask"].cuda().long()
                     outputs = self.model(input_img, task='seg')
@@ -744,6 +1000,7 @@ class MultiTaskTrainer(BaseTrainer):
 
             if not torch.isfinite(loss).item():
                 self.logger.warning(f"Non-finite {task} loss detected at step {i}; skipping backward/optimizer step.")
+                self._log_nan_debug(task, batch, "loss", loss, outputs)
                 optimizer.zero_grad(set_to_none=True)
                 if extra_optimizer is not None:
                     extra_optimizer.zero_grad(set_to_none=True)
@@ -751,11 +1008,13 @@ class MultiTaskTrainer(BaseTrainer):
 
             if self.config.mixed_precision and self.scaler is not None:
                 self.scaler.scale(loss).backward()
+                self._rescale_camera_head_grads(camera_loss_applied)
                 self.scaler.unscale_(optimizer)
                 if extra_optimizer is not None:
                     self.scaler.unscale_(extra_optimizer)
             else:
                 loss.backward()
+                self._rescale_camera_head_grads(camera_loss_applied)
 
             max_norm = getattr(self.config, 'clip_grad_norm', 1.0)
             torch.nn.utils.clip_grad_norm_([p for p in self.model.parameters() if p.requires_grad], max_norm=max_norm)
@@ -773,6 +1032,7 @@ class MultiTaskTrainer(BaseTrainer):
                         extra_optimizer.step()
                 else:
                     self.logger.warning(f"Detected non-finite gradients ({task}). Skipping optimizer step.")
+                    self._log_nan_debug(task, batch, "grad", loss, outputs)
                     optimizer.zero_grad(set_to_none=True)
                     if extra_optimizer is not None:
                         extra_optimizer.zero_grad(set_to_none=True)

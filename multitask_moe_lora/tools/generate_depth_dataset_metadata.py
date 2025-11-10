@@ -77,6 +77,13 @@ DATASET_FILELISTS: Dict[str, List[str]] = {
     ],
     "Kidney3D": [
         "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
+        "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
+    ],
+    "Kidney3D_train": [
+        "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
+    ],
+    "Kidney3D_eval": [
+        "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
     ],
     "SimCol": [
         "/home/ziyi/ssde/data/simcol/cache/train_all_cache.txt",
@@ -104,7 +111,9 @@ NATIVE_DATASETS: Dict[str, Dict[str, Any]] = {
             "root_dir": "/data/ziyi/multitask/data/LS/StereoMIS",
             "split": "all",
             "size": [518, 518],
-            "max_depth": 0.3,
+            # raw StereoMIS depth npy files store millimeters; use a large clamp so we can
+            # rescale to meters later without flattening everything to the old 0.3 m cap
+            "max_depth": 2000.0,
         },
     },
     "hamlyn": {
@@ -323,6 +332,15 @@ def extract_values_from_sample(sample: Dict[str, Any]) -> np.ndarray:
     return depth_np[valid_mask]
 
 
+def adjust_values_for_dataset(dataset: str, values: np.ndarray) -> np.ndarray:
+    """Apply dataset-specific scaling or normalization before statistics."""
+    if values.size == 0:
+        return values
+    if dataset.lower() == "stereomis":
+        return values / 1000.0
+    return values
+
+
 def merge_dataset_stats(
     dataset_name: str, stats: DatasetStats, aggregates: Dict[str, Dict[str, object]]
 ) -> None:
@@ -379,7 +397,8 @@ def process_cache_dataset(
     valid_files = 0
     worker_count = max(1, worker_count)
 
-    if worker_count == 1:
+    def _process_sequential() -> None:
+        nonlocal total_values, total_sum, total_sq_sum, valid_files
         progress = tqdm(sample_paths, desc=f"{dataset}", unit="file")
         for cache_path in progress:
             if not cache_path:
@@ -396,10 +415,12 @@ def process_cache_dataset(
             for idx, cnt in bins_data:
                 bin_store[idx] += cnt
         progress.close()
-    else:
+
+    def _process_parallel(current_workers: int) -> None:
+        nonlocal total_values, total_sum, total_sq_sum, valid_files
         progress = tqdm(total=len(sample_paths), desc=f"{dataset}", unit="file")
-        chunksize = max(1, len(sample_paths) // (worker_count * 4) or 1)
-        with ProcessPoolExecutor(max_workers=worker_count) as executor:
+        chunksize = max(1, len(sample_paths) // (current_workers * 4) or 1)
+        with ProcessPoolExecutor(max_workers=current_workers) as executor:
             results = executor.map(process_cache_file, sample_paths, chunksize=chunksize)
             for bins_data, value_count, sum_values, sq_sum_values, valid_flag in results:
                 progress.update(1)
@@ -412,6 +433,15 @@ def process_cache_dataset(
                 for idx, cnt in bins_data:
                     bin_store[idx] += cnt
         progress.close()
+
+    if worker_count == 1:
+        _process_sequential()
+    else:
+        try:
+            _process_parallel(worker_count)
+        except (PermissionError, OSError) as exc:
+            print(f"{dataset}: multiprocess workers unavailable ({exc}); falling back to single worker.")
+            _process_sequential()
 
     if total_values == 0 or not bin_store:
         print(f"{dataset}: no valid depth samples collected.")
@@ -467,6 +497,7 @@ def process_native_dataset(
         values = extract_values_from_sample(sample)
         if values.size == 0:
             continue
+        values = adjust_values_for_dataset(dataset, values)
         valid_samples += 1
         bins_data, value_count, sum_values, sq_sum_values = histogram_from_values(values)
         total_values += value_count
