@@ -22,7 +22,7 @@ MASTER_PORT=${MASTER_PORT:-20863}
 # ------------------------------------------------------------------------------
 # Core training hyper-parameters
 # ------------------------------------------------------------------------------
-ENCODER=${ENCODER:-"vits"}        # {vits, vitb, vitl, dinov3_*}
+ENCODER=${ENCODER:-"vitb"}        # {vitb, vitb, vitl, dinov3_*}
 FEATURES=${FEATURES:-64}
 EPOCHS=${EPOCHS:-120}
 BATCH_SIZE=${BATCH_SIZE:-24}
@@ -65,7 +65,7 @@ VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidn
 # ------------------------------------------------------------------------------
 BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
 HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
-PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vits.pth"}
+PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vitb.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
 # ------------------------------------------------------------------------------
