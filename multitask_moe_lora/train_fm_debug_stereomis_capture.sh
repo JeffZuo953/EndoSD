@@ -42,6 +42,7 @@ CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.3}
 CAMERA_LOSS_TYPE=${CAMERA_LOSS_TYPE:-"l2"}
 CAMERA_LR=${CAMERA_LR:-5e-4}
 CLIP_GRAD_NORM=${CLIP_GRAD_NORM:-5.0}
+LR_SCHEDULER=${LR_SCHEDULER:-"poly"}
 
 TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
 VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:--1}
@@ -119,6 +120,7 @@ BASE_CMD=(
     --camera-loss-weight "${CAMERA_LOSS_WEIGHT}"
     --camera-loss-type "${CAMERA_LOSS_TYPE}"
     --lr-camera "${CAMERA_LR}"
+    --lr-scheduler "${LR_SCHEDULER}"
     --clip-grad-norm "${CLIP_GRAD_NORM}"
 )
 

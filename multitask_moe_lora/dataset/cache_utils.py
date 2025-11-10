@@ -315,8 +315,50 @@ class DepthCacheDataset(Dataset):
             cached_data['depth'] = depth
 
             max_depth = float(cached_data.get('max_depth', 0.3))
+            dataset_name_lower = self.dataset_name_lower or ""
+            is_stereomis = "stereomis" in dataset_name_lower
+            stereo_max_depth = max_depth if max_depth > 0 else 0.3
+            default_depth_mask = torch.isfinite(depth) & (depth > 0)
+            if is_stereomis:
+                default_depth_mask = default_depth_mask & (depth <= stereo_max_depth + 1e-6)
+            default_depth_mask = default_depth_mask.to(torch.bool)
 
-            depth_valid_data = None if force_depth_positive_mask else cached_data.get('depth_valid_mask')
+            depth_valid = None
+            valid_mask = None
+            depth_valid_data = None
+            if not force_depth_positive_mask:
+                valid_mask_data = cached_data.get('valid_mask')
+                if valid_mask_data is not None:
+                    if torch.is_tensor(valid_mask_data):
+                        valid_mask = valid_mask_data.to(torch.bool)
+                    else:
+                        valid_mask = torch.as_tensor(valid_mask_data, dtype=torch.bool)
+
+                depth_valid_data = cached_data.get('depth_valid_mask')
+                if depth_valid_data is not None:
+                    if torch.is_tensor(depth_valid_data):
+                        depth_valid = depth_valid_data.to(torch.bool)
+                    else:
+                        depth_valid = torch.as_tensor(depth_valid_data, dtype=torch.bool)
+
+            fallback_mask = default_depth_mask
+            depth_clean = depth.clone()
+            depth_clean[~fallback_mask] = 0.0
+            cached_data['depth'] = depth_clean
+
+            if force_depth_positive_mask:
+                cached_data['valid_mask'] = fallback_mask.clone()
+                cached_data['depth_valid_mask'] = fallback_mask.clone()
+            else:
+                if valid_mask is not None:
+                    cached_data['valid_mask'] = valid_mask
+                else:
+                    cached_data.pop('valid_mask', None)
+                if depth_valid is not None:
+                    cached_data['depth_valid_mask'] = depth_valid
+                else:
+                    cached_data.pop('depth_valid_mask', None)
+
             if depth_valid_data is not None:
                 if torch.is_tensor(depth_valid_data):
                     depth_valid = depth_valid_data.to(torch.bool)

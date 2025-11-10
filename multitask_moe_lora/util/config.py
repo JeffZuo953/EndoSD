@@ -64,6 +64,8 @@ class TrainingConfig:
     lr_camera: Optional[float] = None  # 相机头学习率
     weight_decay: float = 0.01
     gradient_accumulation_steps: int = 1
+    lr_scheduler: str = "cosine"
+    poly_power: float = 0.9
     clip_grad_norm: float = 1.0
     val_interval: int = 1
     save_interval: int = 1
@@ -185,6 +187,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lr-camera", default=None, type=float, help="Learning rate for camera head (overrides auto scaling)")
     parser.add_argument("--weight-decay", default=0.01, type=float)
     parser.add_argument("--gradient-accumulation-steps", default=1, type=int, help="Number of gradient accumulation steps")
+    parser.add_argument("--lr-scheduler", default="cosine", choices=["cosine", "poly"],
+                        help="Learning rate scheduler type (cosine or poly)")
+    parser.add_argument("--poly-power", default=0.9, type=float,
+                        help="Power factor for polynomial LR scheduler")
     parser.add_argument("--clip-grad-norm", default=1.0, type=float,
                         help="Max gradient norm for clip_grad_norm_ (set <=0 to disable clipping)")
     parser.add_argument("--val-interval", default=1, type=int, help="Run validation every N epochs")
@@ -306,6 +312,8 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           lr_camera=getattr(args, 'lr_camera', None),
                           weight_decay=getattr(args, 'weight_decay', 0.01),
                           gradient_accumulation_steps=getattr(args, 'gradient_accumulation_steps', 1),
+                          lr_scheduler=getattr(args, 'lr_scheduler', 'cosine'),
+                          poly_power=getattr(args, 'poly_power', 0.9),
                           clip_grad_norm=getattr(args, 'clip_grad_norm', 1.0),
                           val_interval=getattr(args, 'val_interval', 1),
                           save_interval=getattr(args, 'save_interval', 1),
@@ -377,6 +385,11 @@ def validate_config(config: TrainingConfig) -> List[str]:
         errors.append("val_min_samples_per_dataset must be >= 0")
     if not math.isfinite(config.clip_grad_norm):
         errors.append("clip_grad_norm must be a finite float")
+    scheduler_name = (config.lr_scheduler or "cosine").lower()
+    if scheduler_name not in {"cosine", "poly"}:
+        errors.append("lr_scheduler must be either 'cosine' or 'poly'")
+    if config.poly_power <= 0:
+        errors.append("poly_power must be positive")
 
     # 检查seg_bs的合理性
     if config.seg_bs is not None and config.seg_bs <= 0:
