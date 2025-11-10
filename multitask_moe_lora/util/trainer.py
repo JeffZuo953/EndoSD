@@ -10,7 +10,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 import logging
-from typing import Optional, Any, Dict, Tuple
+from typing import Optional, Any, Dict, Tuple, Set
 from itertools import cycle
 import math
 from collections import Counter
@@ -88,6 +88,7 @@ class MultiTaskTrainer(BaseTrainer):
         self._save_bad_snapshots = os.environ.get("FM_DEBUG_SAVE_BAD_SNAPSHOT", "0") == "1"
         self._bad_batch_dir: Optional[Path] = None
         self._last_depth_batch: Optional[Dict[str, Any]] = None
+        self._logged_missing_masks: Set[str] = set()
         if self._save_bad_batches and self.rank == 0:
             try:
                 self._bad_batch_dir = Path(self.config.save_path) / "debug_bad_batches"
@@ -214,32 +215,9 @@ class MultiTaskTrainer(BaseTrainer):
         if current_size == 1:
             return mask_tensor.expand(batch_size, -1, -1, -1).contiguous()
 
-        if current_size < batch_size:
-            if self.rank == 0:
-                missing_indices = range(current_size, batch_size)
-                missing_meta = ", ".join(
-                    self._format_dataset_meta(dataset_entries[i], source_entries[i]) for i in missing_indices
-                )
-                self.logger.warning(
-                    "Dataset mask smaller than batch (%s vs %s). Padding missing entries with all-True mask. Missing samples: %s",
-                    mask_tensor.shape, (batch_size, *mask_tensor.shape[1:]), missing_meta or "unknown"
-                )
-                pad_shape = (batch_size - current_size, *mask_tensor.shape[1:])
-                pad = torch.ones(pad_shape, dtype=torch.bool, device=device)
-                return torch.cat([mask_tensor, pad], dim=0)
-
-        # current_size > batch_size : trim extra entries (shouldn't happen but keep safe)
-        if self.rank == 0:
-            extra_indices = range(batch_size, current_size)
-            extra_meta = ", ".join(
-                self._format_dataset_meta(dataset_entries[i], source_entries[i] if i < len(source_entries) else None)
-                for i in extra_indices if i < len(dataset_entries)
-            )
-            self.logger.warning(
-                "Dataset mask larger than batch (%s vs %s). Truncating extra entries. Extra samples: %s",
-                mask_tensor.shape, (batch_size, *mask_tensor.shape[1:]), extra_meta or "unknown"
-            )
-        return mask_tensor[:batch_size]
+        if current_size != batch_size:
+            return None
+        return mask_tensor
 
     def _apply_dataset_masks(self, batch: Dict[str, Any], mask_depth: torch.Tensor) -> torch.Tensor:
         batch_size = mask_depth.shape[0]

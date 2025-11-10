@@ -22,6 +22,7 @@ except Exception:
     _tmpdir = None
 else:
     _os.environ.setdefault("TMPDIR", _tmpdir)
+_os.environ.setdefault("TORCH_DISTRIBUTED_DEBUG", "INFO")
 import torch
 
 
