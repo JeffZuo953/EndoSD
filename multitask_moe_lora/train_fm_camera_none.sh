@@ -15,8 +15,8 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=${NUM_GPUS:-2}
-CUDA_DEVICES=${CUDA_DEVICES:-"2,3"}
+NUM_GPUS=${NUM_GPUS:-4}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,1,2,3"}
 MASTER_PORT=${MASTER_PORT:-20863}
 
 # ------------------------------------------------------------------------------
