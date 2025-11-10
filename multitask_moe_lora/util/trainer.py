@@ -216,17 +216,17 @@ class MultiTaskTrainer(BaseTrainer):
 
         if current_size < batch_size:
             if self.rank == 0:
-            missing_indices = range(current_size, batch_size)
-            missing_meta = ", ".join(
-                self._format_dataset_meta(dataset_entries[i], source_entries[i]) for i in missing_indices
-            )
-            self.logger.warning(
-                "Dataset mask smaller than batch (%s vs %s). Padding missing entries with all-True mask. Missing samples: %s",
-                mask_tensor.shape, (batch_size, *mask_tensor.shape[1:]), missing_meta or "unknown"
-            )
-            pad_shape = (batch_size - current_size, *mask_tensor.shape[1:])
-            pad = torch.ones(pad_shape, dtype=torch.bool, device=device)
-            return torch.cat([mask_tensor, pad], dim=0)
+                missing_indices = range(current_size, batch_size)
+                missing_meta = ", ".join(
+                    self._format_dataset_meta(dataset_entries[i], source_entries[i]) for i in missing_indices
+                )
+                self.logger.warning(
+                    "Dataset mask smaller than batch (%s vs %s). Padding missing entries with all-True mask. Missing samples: %s",
+                    mask_tensor.shape, (batch_size, *mask_tensor.shape[1:]), missing_meta or "unknown"
+                )
+                pad_shape = (batch_size - current_size, *mask_tensor.shape[1:])
+                pad = torch.ones(pad_shape, dtype=torch.bool, device=device)
+                return torch.cat([mask_tensor, pad], dim=0)
 
         # current_size > batch_size : trim extra entries (shouldn't happen but keep safe)
         if self.rank == 0:
