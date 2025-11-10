@@ -6,6 +6,7 @@
 
 import argparse
 import os
+import math
 from dataclasses import dataclass
 from typing import Optional, List
 
@@ -63,6 +64,7 @@ class TrainingConfig:
     lr_camera: Optional[float] = None  # 相机头学习率
     weight_decay: float = 0.01
     gradient_accumulation_steps: int = 1
+    clip_grad_norm: float = 1.0
     val_interval: int = 1
     save_interval: int = 1
     massive_checkpoint: bool = False
@@ -119,12 +121,12 @@ def create_parser() -> argparse.ArgumentParser:
                         help="Input type for segmentation head ('last', 'last_four', 'from_depth')")
     parser.add_argument("--seg-head-type",
                         default="linear",
-                        choices=["linear", "sf"],
-                        help="Segmentation head architecture (linear BN head or SegFormer-style head)")
+                        choices=["linear", "sf", "none"],
+                        help="Segmentation head architecture (linear BN head, SegFormer-style head, or 'none' to disable)")
     parser.add_argument("--camera-head-mode",
                         default="none",
-                        choices=["none", "simple", "vggtlike", "vggt-like"],
-                        help="Camera head variant: none, simple transformer, or VGGT-like head")
+                        choices=["none", "simple", "prolike", "vggtlike", "vggt-like"],
+                        help="Camera head variant: none, simple transformer, Pro-like, or VGGT-like head")
     parser.add_argument("--camera-loss-type",
                         default="l1",
                         choices=["l1", "l2"],
@@ -183,6 +185,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lr-camera", default=None, type=float, help="Learning rate for camera head (overrides auto scaling)")
     parser.add_argument("--weight-decay", default=0.01, type=float)
     parser.add_argument("--gradient-accumulation-steps", default=1, type=int, help="Number of gradient accumulation steps")
+    parser.add_argument("--clip-grad-norm", default=1.0, type=float,
+                        help="Max gradient norm for clip_grad_norm_ (set <=0 to disable clipping)")
     parser.add_argument("--val-interval", default=1, type=int, help="Run validation every N epochs")
     parser.add_argument("--save-interval", default=1, type=int, help="Save checkpoint every N epochs")
     parser.add_argument("--massive-checkpoint", action="store_true", help="Save checkpoint for every single epoch")
@@ -269,6 +273,10 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
     train_include_list = _parse_list(getattr(args, 'train_dataset_include', None)) or legacy_include
     val_include_list = _parse_list(getattr(args, 'val_dataset_include', None)) or legacy_include
 
+    raw_seg_head_type = getattr(args, 'seg_head_type', "linear") or "linear"
+    seg_head_type = raw_seg_head_type.lower()
+    disable_seg_head = getattr(args, 'disable_seg_head', False) or seg_head_type == "none"
+
     return TrainingConfig(encoder=args.encoder,
                           features=args.features,
                           num_classes=getattr(args, 'num_classes', 3),
@@ -276,8 +284,7 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           max_depth=getattr(args, 'max_depth', 0.2),
                           frozen_backbone=getattr(args, 'frozen_backbone', False),
                           seg_input_type=getattr(args, 'seg_input_type', "last_four"),
-                          seg_head_type=getattr(args, 'seg_head_type', "linear"),
-                          seg_head_type=getattr(args, 'seg_head_type', "linear"),
+                          seg_head_type=seg_head_type,
                           camera_head_mode=getattr(args, 'camera_head_mode', "none").lower(),
                           camera_loss_type=getattr(args, 'camera_loss_type', "l1").lower(),
                           camera_backbone_loss_scale=getattr(args, 'camera_backbone_loss_scale', 1.0),
@@ -299,13 +306,14 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           lr_camera=getattr(args, 'lr_camera', None),
                           weight_decay=getattr(args, 'weight_decay', 0.01),
                           gradient_accumulation_steps=getattr(args, 'gradient_accumulation_steps', 1),
+                          clip_grad_norm=getattr(args, 'clip_grad_norm', 1.0),
                           val_interval=getattr(args, 'val_interval', 1),
                           save_interval=getattr(args, 'save_interval', 1),
                           massive_checkpoint=getattr(args, 'massive_checkpoint', False),
                           depth_loss_weight=getattr(args, 'depth_loss_weight', 1.0),
                           seg_loss_weight=getattr(args, 'seg_loss_weight', 1.0),
                           camera_loss_weight=getattr(args, 'camera_loss_weight', 1.0),
-                          disable_seg_head=getattr(args, 'disable_seg_head', False),
+                          disable_seg_head=disable_seg_head,
                           img_size=getattr(args, 'img_size', 518),
                           dataset_config_name=getattr(args, 'dataset_config_name', 'server_hk_01'),
                           path_transform_name=getattr(args, 'path_transform_name', 'sz_to_hk'),
@@ -367,6 +375,8 @@ def validate_config(config: TrainingConfig) -> List[str]:
         errors.append("max_depth must be greater than min_depth")
     if config.val_min_samples_per_dataset < 0:
         errors.append("val_min_samples_per_dataset must be >= 0")
+    if not math.isfinite(config.clip_grad_norm):
+        errors.append("clip_grad_norm must be a finite float")
 
     # 检查seg_bs的合理性
     if config.seg_bs is not None and config.seg_bs <= 0:

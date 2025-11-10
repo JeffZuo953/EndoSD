@@ -15,9 +15,9 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=${NUM_GPUS:-3}
-CUDA_DEVICES=${CUDA_DEVICES:-"0,1,2"}
-MASTER_PORT=${MASTER_PORT:-20764}
+NUM_GPUS=${NUM_GPUS:-2}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,1"}
+MASTER_PORT=${MASTER_PORT:-20765}
 
 # ------------------------------------------------------------------------------
 # Core training hyper-parameters
@@ -35,14 +35,14 @@ MIN_DEPTH=${MIN_DEPTH:-1e-6}
 MIXED_PRECISION=${MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"simple"}
-CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.3}
+CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.2}
 CAMERA_LOSS_TYPE=${CAMERA_LOSS_TYPE:-"l2"}   # l1 | l2
-CAMERA_LR=${CAMERA_LR:-5e-4}
+CAMERA_LR=${CAMERA_LR:-1e-5}
 
 FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
-TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
-VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-1}
-VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-100}
+TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-300}
+VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:--1}
+VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-64}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
 
 

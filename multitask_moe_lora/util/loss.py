@@ -4,9 +4,10 @@ import torch.nn.functional as F
 
 
 class SiLogLoss(nn.Module):
-    def __init__(self, lambd=0.5):
+    def __init__(self, lambd=0.5, eps: float = 1e-5):
         super().__init__()
         self.lambd = lambd
+        self.eps = max(float(eps), 1e-8)
 
     def forward(self, pred, target, valid_mask=None):
         """
@@ -56,11 +57,11 @@ class SiLogLoss(nn.Module):
         valid_pred = pred_flat[valid_mask_flat]
         valid_target = target_flat[valid_mask_flat]
 
-        # 确保没有零值或负值
-        valid_pred = torch.clamp(valid_pred, min=1e-6)
-        valid_target = torch.clamp(valid_target, min=1e-6)
+        eps = self.eps
+        valid_pred = torch.nan_to_num(valid_pred, nan=eps, neginf=eps)
+        valid_target = torch.nan_to_num(valid_target, nan=eps, neginf=eps)
 
-        diff_log = torch.log(valid_target) - torch.log(valid_pred)
+        diff_log = torch.log(valid_target + eps) - torch.log(valid_pred + eps)
 
         # SiLog损失
         # 避免使用torch.sqrt导致的in-place操作问题，改用torch.pow(..., 0.5)

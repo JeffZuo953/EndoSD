@@ -22,6 +22,15 @@ if _env_skip.strip():
     )
 SKIP_CAMERA_DATASETS = frozenset(_DEFAULT_SKIP_CAMERA)
 
+_FORCE_DEPTH_POSITIVE_MASK_TOKENS = (
+    "endosynth",
+    "c3vd",
+    "c3vdv2",
+    "endomapper",
+    "simcol",
+    "kidney3d",
+)
+
 
 def _resolve_progress_step(default: int = 3000) -> int:
     env_value = os.environ.get("DATASET_PROGRESS_STEP", "").strip()
@@ -41,6 +50,13 @@ def _build_cache_namespace(prefix: str, dataset_name: str, filelist_path: str) -
     digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:8]
     safe_name = (dataset_name or "dataset").strip().replace("/", "_")
     return f"{prefix}/{safe_name}/{digest}"
+
+
+def _should_force_depth_positive_mask(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    lowered = value.lower()
+    return any(token in lowered for token in _FORCE_DEPTH_POSITIVE_MASK_TOKENS)
 
 
 def generate_dataset_cache(dataset: Dataset, output_dir: str, filelist_name: str = "cache_files.txt", origin_prefix: str = "", cache_root_path: str = "") -> str:
@@ -198,6 +214,7 @@ class DepthCacheDataset(Dataset):
                 print(f"[DepthCacheDataset] Skipped {missing_count} missing cache files for {dataset_name or filelist_path}.")
             self.filelist = existing_paths
         self.dataset_name_lower = (self.dataset_name or "unknown").lower()
+        self._force_depth_positive_valid_mask = _should_force_depth_positive_mask(self.dataset_name)
         self._missing_camera_datasets: Set[str] = set()
         self.active_filelist_path = candidate_filelist
         self._progress_step = _resolve_progress_step()
@@ -226,6 +243,7 @@ class DepthCacheDataset(Dataset):
             load_path = self._local_cache.ensure_copy(cache_path, cache_path)
         cached_data = torch.load(load_path, map_location="cpu")
         self._log_progress()
+        force_depth_positive_mask = self._force_depth_positive_valid_mask or _should_force_depth_positive_mask(cache_path)
         if 'c3vd' in cache_path:
             cached_data['max_depth'] = 0.1
         elif 'simcol' in cache_path:
@@ -298,7 +316,7 @@ class DepthCacheDataset(Dataset):
 
             max_depth = float(cached_data.get('max_depth', 0.3))
 
-            depth_valid_data = cached_data.get('depth_valid_mask')
+            depth_valid_data = None if force_depth_positive_mask else cached_data.get('depth_valid_mask')
             if depth_valid_data is not None:
                 if torch.is_tensor(depth_valid_data):
                     depth_valid = depth_valid_data.to(torch.bool)
@@ -307,7 +325,7 @@ class DepthCacheDataset(Dataset):
             else:
                 depth_valid = None
 
-            valid_mask_data = cached_data.get('valid_mask')
+            valid_mask_data = None if force_depth_positive_mask else cached_data.get('valid_mask')
             if valid_mask_data is not None:
                 if torch.is_tensor(valid_mask_data):
                     valid_mask = valid_mask_data.to(torch.bool)
@@ -316,22 +334,27 @@ class DepthCacheDataset(Dataset):
             else:
                 valid_mask = None
 
-            if depth_valid is None and valid_mask is not None:
+            if force_depth_positive_mask:
+                positive_mask = torch.isfinite(depth) & (depth > 0)
+                valid_mask = positive_mask.to(torch.bool)
                 depth_valid = valid_mask.clone()
+            else:
+                if depth_valid is None and valid_mask is not None:
+                    depth_valid = valid_mask.clone()
 
-            if valid_mask is None:
-                if depth_valid is not None:
-                    valid_mask = depth_valid.clone()
-                else:
-                    image = cached_data['image']
-                    computed_valid = compute_valid_mask(image, depth, min_depth=1e-3, max_depth=max_depth)
-                    if torch.is_tensor(computed_valid):
-                        valid_mask = computed_valid.to(torch.bool)
+                if valid_mask is None:
+                    if depth_valid is not None:
+                        valid_mask = depth_valid.clone()
                     else:
-                        valid_mask = torch.as_tensor(computed_valid, dtype=torch.bool)
+                        image = cached_data['image']
+                        computed_valid = compute_valid_mask(image, depth, min_depth=1e-3, max_depth=max_depth)
+                        if torch.is_tensor(computed_valid):
+                            valid_mask = computed_valid.to(torch.bool)
+                        else:
+                            valid_mask = torch.as_tensor(computed_valid, dtype=torch.bool)
 
-            if depth_valid is None:
-                depth_valid = valid_mask.clone()
+                if depth_valid is None:
+                    depth_valid = valid_mask.clone()
 
             depth_clean = depth.clone()
             depth_clean[~valid_mask] = 0.0

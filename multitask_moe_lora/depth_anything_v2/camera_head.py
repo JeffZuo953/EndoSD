@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -87,7 +88,7 @@ class SimpleCameraHead(_BaseCameraHead):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
-    def forward(self, patch_tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, patch_tokens: torch.Tensor, patch_h: Optional[int] = None, patch_w: Optional[int] = None) -> torch.Tensor:
         """
         Args:
             patch_tokens: Tensor with shape [B, N, C], containing patch embeddings.
@@ -137,7 +138,7 @@ class VGGTLiteCameraHead(_BaseCameraHead):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
-    def forward(self, patch_tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, patch_tokens: torch.Tensor, patch_h: Optional[int] = None, patch_w: Optional[int] = None) -> torch.Tensor:
         """
         Args:
             patch_tokens: Tensor with shape [B, N, C], containing patch embeddings.
@@ -152,4 +153,45 @@ class VGGTLiteCameraHead(_BaseCameraHead):
         encoded = self.encoder(tokens)
         camera_feat = encoded[:, 0]  # camera token position
         logits = self.output_head(camera_feat)
+        return self._normalize_output(logits)
+
+
+class ProLikeCameraHead(_BaseCameraHead):
+    """
+    FOV encoder inspired camera head that operates on spatial feature maps.
+
+    It reshapes the final transformer block tokens into a 2D map and applies a
+    stack of stride-2 convolutions followed by a 1x1 prediction of fx/fy/cx/cy.
+    """
+
+    def __init__(
+        self,
+        embed_dim: int,
+        adapter_rank: int = 0,
+        adapter_alpha: int = 1,
+        adapter_dropout: float = 0.0,
+    ) -> None:
+        super().__init__(embed_dim, hidden_dim=embed_dim, adapter_rank=adapter_rank, adapter_alpha=adapter_alpha, adapter_dropout=adapter_dropout)
+        num_features = embed_dim
+        self.conv_head = nn.Sequential(
+            nn.Conv2d(num_features, num_features // 2, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(num_features // 2, num_features // 4, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(num_features // 4, num_features // 8, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(num_features // 8, 4, kernel_size=6, stride=1, padding=0),
+            nn.AdaptiveAvgPool2d(1),
+        )
+
+    def forward(self, patch_tokens: torch.Tensor, patch_h: Optional[int] = None, patch_w: Optional[int] = None) -> torch.Tensor:
+        bsz, num_patches, channels = patch_tokens.shape
+        if patch_h is None or patch_w is None:
+            patch_h = patch_w = int(math.sqrt(num_patches))
+        if patch_h * patch_w != num_patches:
+            raise ValueError(f"Unable to reshape tokens of length {num_patches} into ({patch_h}, {patch_w}) grid.")
+
+        tokens = self.input_adapter(patch_tokens)
+        feature_map = tokens.transpose(1, 2).reshape(bsz, channels, patch_h, patch_w).contiguous()
+        logits = self.conv_head(feature_map).flatten(1)
         return self._normalize_output(logits)

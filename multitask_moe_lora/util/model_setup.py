@@ -18,6 +18,43 @@ from ..depth_anything_v2.dpt_multitask import create_multitask_model
 from .model_io import remap_checkpoint_keys
 
 
+def _normalize_state_dict_keys(state_dict: Dict[str, torch.Tensor],
+                               logger: logging.Logger) -> Dict[str, torch.Tensor]:
+    """
+    Normalize common wrapper prefixes so debug snapshots and standard checkpoints share the same key space.
+    """
+    if not isinstance(state_dict, dict):
+        return state_dict
+
+    prefix_order = [
+        "model.module.",
+        "module.model.",
+        "module.",
+        "model.",
+    ]
+    normalized = {}
+    collisions = 0
+    for raw_key, value in state_dict.items():
+        new_key = raw_key
+        stripped = True
+        while stripped:
+            stripped = False
+            for prefix in prefix_order:
+                if new_key.startswith(prefix):
+                    new_key = new_key[len(prefix):]
+                    stripped = True
+                    break
+        if new_key in normalized and normalized[new_key] is not value:
+            collisions += 1
+            logger.debug(f"Duplicate key after normalization: {new_key}, keeping first occurrence.")
+            continue
+        normalized[new_key] = value
+
+    if collisions:
+        logger.warning(f"State dict normalization detected {collisions} duplicate keys after prefix stripping.")
+    return normalized
+
+
 def load_weights_from_checkpoint(model: torch.nn.Module,
                                  optimizer_depth: Optional[torch.optim.Optimizer],
                                  optimizer_seg: Optional[torch.optim.Optimizer],
@@ -46,6 +83,9 @@ def load_weights_from_checkpoint(model: torch.nn.Module,
         state_dict = checkpoint['state_dict']
     else:
         state_dict = checkpoint
+
+    # Debug snapshots may store keys under module/model prefixes; normalize them once to avoid re-init.
+    state_dict = _normalize_state_dict_keys(state_dict, logger)
         
     # First, remap keys for LoRA/MoE compatibility to standardize them
     state_dict = remap_checkpoint_keys(state_dict, model, config, logger)
@@ -468,11 +508,13 @@ def setup_complete_model(config: TrainingConfig, logger: logging.Logger):
 
     if getattr(config, 'disable_seg_head', False):
         actual_model = model.module if hasattr(model, 'module') else model
-        if hasattr(actual_model, 'seg_head'):
+        if hasattr(actual_model, 'seg_head') and actual_model.seg_head is not None:
             for param in actual_model.seg_head.parameters():
                 param.requires_grad = False
             actual_model.seg_head.eval()
             logger.info("Segmentation head disabled: parameters frozen and excluded from optimizer.")
+        else:
+            logger.info("Segmentation head disabled: no seg_head module instantiated.")
     
     # 设置优化器和调度器
     from .loss_weighter import LossWeighter

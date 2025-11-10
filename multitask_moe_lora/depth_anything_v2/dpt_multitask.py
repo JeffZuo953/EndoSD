@@ -8,7 +8,7 @@ import math
 from .dinov2 import DINOv2
 from .dinov3 import DINOv3
 from .dpt import DPTHead
-from .camera_head import SimpleCameraHead, VGGTLiteCameraHead
+from .camera_head import ProLikeCameraHead, SimpleCameraHead, VGGTLiteCameraHead
 
 # 使用绝对导入避免相对导入问题
 import sys
@@ -92,34 +92,36 @@ class DepthAnythingV2_MultiTask(nn.Module):
             'dinov3_vit7b16': 40
         }
 
-        # 语义分割头层索引预计算
-        self.seg_layer_idx_map = {
-            'vits': [8, 9, 10, 11],
-            'vitb': [8, 9, 10, 11],
-            'vitl': [20, 21, 22, 23],
-            'vitg': [36, 37, 38, 39],
-            'dinov3_vits16': [8, 9, 10, 11],
-            'dinov3_vits16plus': [8, 9, 10, 11],
-            'dinov3_vitb16': [8, 9, 10, 11],
-            'dinov3_vitl16': [20, 21, 22, 23],
-            'dinov3_vitl16plus': [20, 21, 22, 23],
-            'dinov3_vith16plus': [28, 29, 30, 31],
-            'dinov3_vit7b16': [36, 37, 38, 39]
-        }
-        total_layers = self.num_layers[self.encoder]
-        if self.seg_input_type == 'last':
-            self.seg_layer_idx = [total_layers - 1]
-        elif self.seg_input_type == 'last_four':
-            self.seg_layer_idx = self.seg_layer_idx_map.get(self.encoder, list(range(total_layers - 4, total_layers)))
-        elif self.seg_input_type == 'from_depth':
-            self.seg_layer_idx = self.depth_layer_idx[self.encoder]
-        else:
-            raise ValueError(f"Unknown seg_input_type: {self.seg_input_type}")
+        self.seg_layer_idx = []
+        if self.seg_head_type != "none":
+            # 语义分割头层索引预计算
+            self.seg_layer_idx_map = {
+                'vits': [8, 9, 10, 11],
+                'vitb': [8, 9, 10, 11],
+                'vitl': [20, 21, 22, 23],
+                'vitg': [36, 37, 38, 39],
+                'dinov3_vits16': [8, 9, 10, 11],
+                'dinov3_vits16plus': [8, 9, 10, 11],
+                'dinov3_vitb16': [8, 9, 10, 11],
+                'dinov3_vitl16': [20, 21, 22, 23],
+                'dinov3_vitl16plus': [20, 21, 22, 23],
+                'dinov3_vith16plus': [28, 29, 30, 31],
+                'dinov3_vit7b16': [36, 37, 38, 39]
+            }
+            total_layers = self.num_layers[self.encoder]
+            if self.seg_input_type == 'last':
+                self.seg_layer_idx = [total_layers - 1]
+            elif self.seg_input_type == 'last_four':
+                self.seg_layer_idx = self.seg_layer_idx_map.get(self.encoder, list(range(total_layers - 4, total_layers)))
+            elif self.seg_input_type == 'from_depth':
+                self.seg_layer_idx = self.depth_layer_idx[self.encoder]
+            else:
+                raise ValueError(f"Unknown seg_input_type: {self.seg_input_type}")
 
-        if self.seg_head_type not in {"linear", "sf"}:
-            raise ValueError(f"Unsupported seg_head_type: {self.seg_head_type}")
-        # 新的语义头共享与深度头相同的层索引，便于特征对齐
-        self.seg_layer_idx = self.depth_layer_idx[self.encoder]
+            if self.seg_head_type not in {"linear", "sf"}:
+                raise ValueError(f"Unsupported seg_head_type: {self.seg_head_type}")
+            # 新的语义头共享与深度头相同的层索引，便于特征对齐
+            self.seg_layer_idx = self.depth_layer_idx[self.encoder]
 
         if self.endo_unid_enabled:
             self.endo_unid_cfg = self._build_endo_unid_cfg()
@@ -202,13 +204,15 @@ class DepthAnythingV2_MultiTask(nn.Module):
         patch_size = self.get_patch_size()
         self.depth_head = DPTHead(self.backbone.embed_dim, features, use_bn, out_channels=out_channels, use_clstoken=use_clstoken, patch_size=patch_size)
 
-        num_seg_layers = len(self.seg_layer_idx)
-        seg_in_channels = [self.backbone.embed_dim] * num_seg_layers
+        self.seg_head = None
+        if self.seg_head_type != "none":
+            num_seg_layers = len(self.seg_layer_idx)
+            seg_in_channels = [self.backbone.embed_dim] * num_seg_layers
 
-        if self.seg_head_type == "linear":
-            self.seg_head = LinearBNHead(in_channels=seg_in_channels, channels=features, num_classes=num_classes, in_index=list(range(num_seg_layers)))
-        else:
-            self.seg_head = SegFormerHead(in_channels=seg_in_channels, embedding_dim=features, num_classes=num_classes, align_corners=False)
+            if self.seg_head_type == "linear":
+                self.seg_head = LinearBNHead(in_channels=seg_in_channels, channels=features, num_classes=num_classes, in_index=list(range(num_seg_layers)))
+            else:
+                self.seg_head = SegFormerHead(in_channels=seg_in_channels, embedding_dim=features, num_classes=num_classes, align_corners=False)
 
         camera_adapter_rank = self.endo_unid_params.get('camera_r', 0) if self.endo_unid_enabled else 0
         camera_adapter_alpha = self.endo_unid_params.get('camera_alpha', 1) if self.endo_unid_enabled else 1
@@ -217,6 +221,13 @@ class DepthAnythingV2_MultiTask(nn.Module):
         # Optional camera head
         if self.camera_head_mode == "simple":
             self.camera_head = SimpleCameraHead(
+                self.backbone.embed_dim,
+                adapter_rank=camera_adapter_rank,
+                adapter_alpha=camera_adapter_alpha,
+                adapter_dropout=camera_adapter_dropout,
+            )
+        elif self.camera_head_mode == "prolike":
+            self.camera_head = ProLikeCameraHead(
                 self.backbone.embed_dim,
                 adapter_rank=camera_adapter_rank,
                 adapter_alpha=camera_adapter_alpha,
@@ -260,7 +271,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
             depth_features = [(patch, cls) for patch, cls in depth_features]
             results['depth_features'] = depth_features
 
-        if task in ['seg', 'both']:
+        if task in ['seg', 'both'] and self.seg_head is not None:
             # 根据配置获取分割任务的特征
             self._set_adapter_scopes(['shared', 'seg'])
             seg_features = self.backbone.get_intermediate_layers(x, n=self.seg_layer_idx, return_class_token=False)
@@ -296,6 +307,8 @@ class DepthAnythingV2_MultiTask(nn.Module):
         """
         语义分割前向传播
         """
+        if self.seg_head is None:
+            raise RuntimeError("Segmentation head is disabled but forward_segmentation was called.")
         patch_size = self.get_patch_size()
         patch_h, patch_w = math.ceil(h / patch_size), math.ceil(w / patch_size)
         reshaped_features = self._reshape_seg_inputs(features, patch_h, patch_w)
@@ -323,7 +336,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
             # 深度预测 - 使用depth专用features
             depth_features = feature_results['depth_features']
             patch_size = self.get_patch_size()
-            patch_h, patch_w = h // patch_size, w // patch_size
+            patch_h, patch_w = math.ceil(h / patch_size), math.ceil(w / patch_size)
             depth_raw = self.depth_head(depth_features, patch_h, patch_w) * self.max_depth
             depth_pred = depth_raw.squeeze(1)
             # 上采样到原始输入尺寸
@@ -337,7 +350,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
             if self.camera_head is not None:
                 # Use the last depth layer tokens as camera input
                 last_depth_tokens, _ = depth_features[-1]
-                camera_norm = self.camera_head(last_depth_tokens)
+                camera_norm = self.camera_head(last_depth_tokens, patch_h, patch_w)
                 results['camera_intrinsics_norm'] = camera_norm
                 fx = camera_norm[:, 0] * w
                 fy = camera_norm[:, 1] * h
@@ -351,7 +364,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
                 intrinsics[:, 2, 2] = 1.0
                 results['camera_intrinsics'] = intrinsics
 
-        if task in ['seg', 'both']:
+        if task in ['seg', 'both'] and self.seg_head is not None:
             # 分割预测 - 使用seg专用features
             seg_features = feature_results['seg_features']
             seg_raw_features = self.forward_segmentation(seg_features, h, w)

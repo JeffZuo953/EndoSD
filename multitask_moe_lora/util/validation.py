@@ -72,9 +72,13 @@ except Exception:
 class DepthValidator:
     """深度估计验证器"""
 
+    _MASKED_DATASETS = {"scard", "scared", "dvpn", "stereomis", "endovis2017", "endovis2018"}
+
     def __init__(self, config: TrainingConfig):
         self.config = config
-        self.criterion = SiLogLoss()
+        min_depth_cfg = float(getattr(self.config, 'min_depth', 1e-6) or 1e-6)
+        self._min_safe_depth = max(min_depth_cfg, 1e-5)
+        self.criterion = SiLogLoss(eps=self._min_safe_depth)
         self.pred_folder = None
 
     def setup_output_folder(self, save_path: str) -> None:
@@ -112,8 +116,11 @@ class DepthValidator:
                 base_mask = base_mask.unsqueeze(1)
             base_mask = base_mask.to(torch.bool)
         # 使用与训练阶段一致的深度范围约束
-        range_mask = (target_gt > 0) & (target_gt >= self.config.min_depth) & (target_gt <= self.config.max_depth)
+        range_mask = (target_gt > 0) & (target_gt >= self._min_safe_depth) & (target_gt <= self.config.max_depth)
         valid_mask_4d = range_mask if base_mask is None else (range_mask & base_mask)
+        dataset_mask = self._extract_dataset_mask(batch, valid_mask_4d.device, valid_mask_4d.shape[0])
+        if dataset_mask is not None:
+            valid_mask_4d = valid_mask_4d & dataset_mask
         loss = self.criterion(pred, target_gt, valid_mask_4d)
 
         # 确保维度一致：pred是3D [B,H,W]，target_gt是4D [B,1,H,W]
@@ -130,6 +137,61 @@ class DepthValidator:
         """保存预测结果"""
         if self.pred_folder is not None:
             save_depth_prediction(pred, f'epoch_{epoch}.png', self.pred_folder)
+
+    def _normalize_meta_list(self, value: Any, batch_size: int) -> list:
+        if value is None:
+            return [None] * batch_size
+        if isinstance(value, (list, tuple)):
+            entries = list(value)
+            if len(entries) == batch_size:
+                return entries
+            if len(entries) == 1:
+                return entries * batch_size
+            if len(entries) < batch_size:
+                entries.extend([entries[-1]] * (batch_size - len(entries)))
+            return entries[:batch_size]
+        return [value] * batch_size
+
+    def _extract_dataset_mask(self, batch: Dict[str, Any], device: torch.device, batch_size: int) -> Optional[torch.Tensor]:
+        dataset_entries = self._normalize_meta_list(batch.get("dataset_name"), batch_size)
+        source_entries = self._normalize_meta_list(batch.get("source_type"), batch_size)
+
+        apply_flags = torch.zeros(batch_size, dtype=torch.bool, device=device)
+        for idx in range(batch_size):
+            name = dataset_entries[idx]
+            source = source_entries[idx]
+            matched = False
+            if name is not None:
+                matched = str(name).lower() in self._MASKED_DATASETS
+            if not matched and source is not None:
+                matched = str(source).lower() in self._MASKED_DATASETS
+            apply_flags[idx] = matched
+
+        if not bool(apply_flags.any()):
+            return None
+
+        if "depth_valid_mask" in batch:
+            mask_tensor = batch["depth_valid_mask"]
+        elif "valid_mask" in batch:
+            mask_tensor = batch["valid_mask"]
+        else:
+            return None
+
+        if not torch.is_tensor(mask_tensor):
+            mask_tensor = torch.as_tensor(mask_tensor)
+
+        if mask_tensor.dim() == 3:
+            mask_tensor = mask_tensor.unsqueeze(1)
+        elif mask_tensor.dim() != 4:
+            return None
+
+        mask_tensor = mask_tensor.to(device=device, dtype=torch.bool)
+        if mask_tensor.shape[0] != batch_size:
+            return None
+
+        merged_mask = torch.ones_like(mask_tensor, dtype=torch.bool, device=device)
+        merged_mask[apply_flags] = mask_tensor[apply_flags]
+        return merged_mask
 
 
 class SegValidator:

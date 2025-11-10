@@ -5,26 +5,15 @@
 重构版本 - 使用模块化架构
 """
 
-# 添加父目录到 Python 路径，避免导入问题
-# 导入重构后的模块
-try:
-    from .util.config import parse_and_validate_config
-    from .util.train_utils import setup_training_environment, cleanup_distributed, validate_training_setup
-    from .util.data_utils import setup_dataloaders, log_batch_info, summarize_loader_composition
-    from .util.model_setup import setup_complete_model
-    from .util.trainer import MultiTaskTrainer
-    from .util.validation import run_initial_evaluation, run_epoch_validation
-    from .util.checkpoint_manager import CheckpointManager
-    from .util.training_loop import run_training_loop
-except ImportError:  # direct script execution
-    from util.config import parse_and_validate_config
-    from util.train_utils import setup_training_environment, cleanup_distributed, validate_training_setup
-    from util.data_utils import setup_dataloaders, log_batch_info, summarize_loader_composition
-    from util.model_setup import setup_complete_model
-    from util.trainer import MultiTaskTrainer
-    from util.validation import run_initial_evaluation, run_epoch_validation
-    from util.checkpoint_manager import CheckpointManager
-    from util.training_loop import run_training_loop
+# 统一使用绝对导入，确保通过 `python -m multitask_moe_lora.train_multitask_depth_seg` 调用稳定
+from multitask_moe_lora.util.config import parse_and_validate_config
+from multitask_moe_lora.util.train_utils import setup_training_environment, cleanup_distributed, validate_training_setup
+from multitask_moe_lora.util.data_utils import setup_dataloaders, log_batch_info, summarize_loader_composition
+from multitask_moe_lora.util.model_setup import setup_complete_model
+from multitask_moe_lora.util.trainer import MultiTaskTrainer
+from multitask_moe_lora.util.validation import run_initial_evaluation, run_epoch_validation
+from multitask_moe_lora.util.checkpoint_manager import CheckpointManager
+from multitask_moe_lora.util.training_loop import run_training_loop
 import os as _os
 _tmpdir = _os.environ.get("TMPDIR") or "/data/ziyi/tmp"
 try:
@@ -38,7 +27,9 @@ import torch
 
 def main():
     """主训练函数 - 协调整个训练流程"""
-    torch.autograd.set_detect_anomaly(True)
+    if _os.environ.get("FM_DEBUG_MODE", "0") in {"1", "true", "True"}:
+        torch.autograd.set_detect_anomaly(True)
+        print("--- 警告: 已启用 autograd 异常检测 仅在调试时开启，会降低训练速度---")
     logger = None
     try:
         # 1. 解析和验证配置
@@ -167,7 +158,4 @@ def main():
 
 
 if __name__ == "__main__":
-    print("--- 警告: 已启用 autograd 异常检测 仅在调试时开启，会降低训练速度---")
-    torch.autograd.set_detect_anomaly(True) 
     main()
-

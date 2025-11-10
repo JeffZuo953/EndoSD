@@ -105,7 +105,7 @@ class CheckpointManager:
         save_epoch_snapshot = (
             self.config.massive_checkpoint
             or 45 <= epoch_one_based <= 55
-            or epoch_one_based % 10 == 0
+            or epoch_one_based % 5 == 0
         )
         if save_epoch_snapshot:
             self.save(epoch, f"epoch_{epoch_one_based}")

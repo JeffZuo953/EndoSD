@@ -41,21 +41,44 @@ class LossWeighter:
                 return seg_loss
             return depth_loss + seg_loss
 
-        log_vars_clamped = torch.clamp(self.log_vars,
+        result_dtype = None
+        if depth_loss is not None:
+            result_dtype = depth_loss.dtype
+        elif seg_loss is not None:
+            result_dtype = seg_loss.dtype
+
+        depth_loss_fp32 = depth_loss.to(torch.float32) if depth_loss is not None else None
+        seg_loss_fp32 = seg_loss.to(torch.float32) if seg_loss is not None else None
+
+        log_vars_fp32 = self.log_vars.to(torch.float32)
+        log_vars_clamped = torch.clamp(log_vars_fp32,
                                        min=self.log_var_bounds[0],
                                        max=self.log_var_bounds[1])
 
         depth_weight = torch.exp(-log_vars_clamped[0]) * self.config.depth_loss_weight
         seg_weight = torch.exp(-log_vars_clamped[1]) * self.config.seg_loss_weight
 
-        depth_term = depth_loss * depth_weight + log_vars_clamped[0]
-        seg_term = seg_loss * seg_weight + log_vars_clamped[1]
+        depth_term = depth_loss_fp32 * depth_weight + log_vars_clamped[0] if depth_loss_fp32 is not None else None
+        seg_term = seg_loss_fp32 * seg_weight + log_vars_clamped[1] if seg_loss_fp32 is not None else None
 
+        target_dtype = result_dtype or torch.float32
         if task == 'depth':
-            return depth_term
+            if depth_term is None:
+                raise ValueError("Depth loss term requested but missing.")
+            return depth_term.to(target_dtype)
         if task == 'seg':
-            return seg_term
-        return depth_term + seg_term
+            if seg_term is None:
+                raise ValueError("Segmentation loss term requested but missing.")
+            return seg_term.to(target_dtype)
+
+        total = None
+        if depth_term is not None:
+            total = depth_term if total is None else total + depth_term
+        if seg_term is not None:
+            total = seg_term if total is None else total + seg_term
+        if total is None:
+            raise ValueError("UWL requires at least one loss term.")
+        return total.to(target_dtype)
 
     def sanitize_parameters(self) -> None:
         """在优化器step之后对log_vars做投影，清理NaN/Inf并限制在安全范围内。"""

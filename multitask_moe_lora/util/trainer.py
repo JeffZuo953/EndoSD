@@ -26,6 +26,8 @@ from .loss_weighter import LossWeighter
 class MultiTaskTrainer(BaseTrainer):
     """多任务训练器，支持独立或统一优化器"""
 
+    _MASKED_DATASETS = {"scard", "scared", "dvpn", "stereomis", "endovis2017", "endovis2018"}
+
     def __init__(self,
                  model: torch.nn.Module,
                  config: TrainingConfig,
@@ -56,7 +58,9 @@ class MultiTaskTrainer(BaseTrainer):
         self.scheduler_unified = scheduler_unified
 
         self.loss_weighter = loss_weighter
-        self.depth_criterion = SiLogLoss().cuda()
+        min_depth_cfg = float(getattr(self.config, 'min_depth', 1e-6) or 1e-6)
+        self._min_safe_depth = max(min_depth_cfg, 1e-5)
+        self.depth_criterion = SiLogLoss(eps=self._min_safe_depth).cuda()
         self.camera_criterion = torch.nn.L1Loss(reduction='mean').cuda()
         # Keep reduction='mean' but handle all-ignore batches explicitly before calling
         self.seg_criterion = torch.nn.CrossEntropyLoss(ignore_index=255, reduction='mean').cuda()
@@ -144,6 +148,124 @@ class MultiTaskTrainer(BaseTrainer):
             if camera_pred is not None:
                 msg.append(self._describe_tensor(camera_pred, "camera_pred"))
         self.logger.error(" | ".join(filter(None, msg)))
+
+    def _normalize_meta_list(self, value: Any, batch_size: int) -> list:
+        if value is None:
+            return [None] * batch_size
+        if isinstance(value, (list, tuple)):
+            entries = list(value)
+            if len(entries) == batch_size:
+                return entries
+            if len(entries) == 1:
+                return entries * batch_size
+            if len(entries) < batch_size:
+                entries.extend([entries[-1]] * (batch_size - len(entries)))
+            return entries[:batch_size]
+        return [value] * batch_size
+
+    def _masked_dataset_flags(self,
+                              dataset_entries: list,
+                              source_entries: list,
+                              batch_size: int,
+                              device: torch.device) -> torch.Tensor:
+        flags = torch.zeros(batch_size, dtype=torch.bool, device=device)
+        for idx in range(batch_size):
+            entry = dataset_entries[idx]
+            source = source_entries[idx]
+            matched = False
+            if entry is not None:
+                matched = str(entry).lower() in self._MASKED_DATASETS
+            if not matched and source is not None:
+                matched = str(source).lower() in self._MASKED_DATASETS
+            flags[idx] = matched
+        return flags
+
+    def _format_dataset_meta(self, name: Optional[Any], source: Optional[Any]) -> str:
+        if name and source:
+            return f"{name}({source})"
+        return str(name or source or "unknown")
+
+    def _extract_dataset_mask_tensor(self,
+                                     batch: Dict[str, Any],
+                                     device: torch.device,
+                                     batch_size: int,
+                                     dataset_entries: list,
+                                     source_entries: list) -> Optional[torch.Tensor]:
+        if "depth_valid_mask" in batch:
+            mask_tensor = batch["depth_valid_mask"]
+        elif "valid_mask" in batch:
+            mask_tensor = batch["valid_mask"]
+        else:
+            return None
+
+        if not torch.is_tensor(mask_tensor):
+            mask_tensor = torch.as_tensor(mask_tensor)
+
+        if mask_tensor.dim() == 3:
+            mask_tensor = mask_tensor.unsqueeze(1)
+        elif mask_tensor.dim() != 4:
+            return None
+        mask_tensor = mask_tensor.to(device=device, dtype=torch.bool)
+
+        current_size = mask_tensor.shape[0]
+        if current_size == batch_size:
+            return mask_tensor
+
+        if current_size == 1:
+            return mask_tensor.expand(batch_size, -1, -1, -1).contiguous()
+
+        if current_size < batch_size:
+            if self.rank == 0:
+            missing_indices = range(current_size, batch_size)
+            missing_meta = ", ".join(
+                self._format_dataset_meta(dataset_entries[i], source_entries[i]) for i in missing_indices
+            )
+            self.logger.warning(
+                "Dataset mask smaller than batch (%s vs %s). Padding missing entries with all-True mask. Missing samples: %s",
+                mask_tensor.shape, (batch_size, *mask_tensor.shape[1:]), missing_meta or "unknown"
+            )
+            pad_shape = (batch_size - current_size, *mask_tensor.shape[1:])
+            pad = torch.ones(pad_shape, dtype=torch.bool, device=device)
+            return torch.cat([mask_tensor, pad], dim=0)
+
+        # current_size > batch_size : trim extra entries (shouldn't happen but keep safe)
+        if self.rank == 0:
+            extra_indices = range(batch_size, current_size)
+            extra_meta = ", ".join(
+                self._format_dataset_meta(dataset_entries[i], source_entries[i] if i < len(source_entries) else None)
+                for i in extra_indices if i < len(dataset_entries)
+            )
+            self.logger.warning(
+                "Dataset mask larger than batch (%s vs %s). Truncating extra entries. Extra samples: %s",
+                mask_tensor.shape, (batch_size, *mask_tensor.shape[1:]), extra_meta or "unknown"
+            )
+        return mask_tensor[:batch_size]
+
+    def _apply_dataset_masks(self, batch: Dict[str, Any], mask_depth: torch.Tensor) -> torch.Tensor:
+        batch_size = mask_depth.shape[0]
+        dataset_entries = self._normalize_meta_list(batch.get("dataset_name"), batch_size)
+        source_entries = self._normalize_meta_list(batch.get("source_type"), batch_size)
+        selector = self._masked_dataset_flags(dataset_entries, source_entries, batch_size, mask_depth.device)
+        if not bool(selector.any()):
+            return mask_depth
+
+        dataset_mask = self._extract_dataset_mask_tensor(
+            batch, mask_depth.device, batch_size, dataset_entries, source_entries
+        )
+        if dataset_mask is None:
+            if self.rank == 0:
+                dataset_meta = batch.get("dataset_name") or batch.get("source_type")
+                self.logger.warning("Requested dataset mask but none found for batch meta: %s", dataset_meta)
+            return mask_depth
+
+        if dataset_mask.shape[0] != batch_size:
+            if self.rank == 0:
+                self.logger.warning("Dataset mask batch mismatch: mask=%s, batch=%s", dataset_mask.shape, mask_depth.shape)
+            return mask_depth
+
+        updated_mask = mask_depth.clone()
+        updated_mask[selector] = updated_mask[selector] & dataset_mask[selector]
+        return updated_mask
 
     def _rescale_camera_head_grads(self, camera_loss_applied: bool) -> None:
         if not camera_loss_applied:
@@ -571,10 +693,11 @@ class MultiTaskTrainer(BaseTrainer):
                 self.scaler.unscale_(self.optimizer_unified)
 
             max_norm = getattr(self.config, 'clip_grad_norm', 1.0)
-            params_to_clip = [p for p in self.model.parameters() if p.requires_grad]
-            if getattr(self.loss_weighter, "log_vars", None) is not None:
-                params_to_clip.append(self.loss_weighter.log_vars)
-            torch.nn.utils.clip_grad_norm_(params_to_clip, max_norm=max_norm)
+            if max_norm and max_norm > 0:
+                params_to_clip = [p for p in self.model.parameters() if p.requires_grad]
+                if getattr(self.loss_weighter, "log_vars", None) is not None:
+                    params_to_clip.append(self.loss_weighter.log_vars)
+                torch.nn.utils.clip_grad_norm_(params_to_clip, max_norm=max_norm)
 
             named_params = list(self.model.named_parameters())
             if getattr(self.loss_weighter, "log_vars", None) is not None:
@@ -704,6 +827,7 @@ class MultiTaskTrainer(BaseTrainer):
         camera_loss = None
         camera_loss_applied = False
         min_depth_cfg = float(getattr(self.config, 'min_depth', 1e-6) or 1e-6)
+        min_safe_depth = getattr(self, '_min_safe_depth', max(min_depth_cfg, 1e-5))
         max_depth_cfg = float(getattr(self.config, 'max_depth', 1.0) or 1.0)
         with autocast(enabled=self.config.mixed_precision, **self.autocast_kwargs):
             img_depth = batch_depth["image"].cuda()
@@ -712,12 +836,13 @@ class MultiTaskTrainer(BaseTrainer):
                 img_depth = img_depth.clamp_(-10.0, 10.0)
             raw_gt_depth = batch_depth["depth"].cuda()
             gt_depth = torch.nan_to_num(raw_gt_depth, nan=0.0, posinf=max_depth_cfg, neginf=0.0)
-            gt_depth = gt_depth.clamp_(min=min_depth_cfg, max=max_depth_cfg)
+            gt_depth = gt_depth.clamp_(min=min_safe_depth, max=max_depth_cfg)
             outputs_depth = self.model(img_depth, task='depth')
             pred_depth = outputs_depth['depth']
             pred_depth = torch.nan_to_num(pred_depth, nan=0.0, posinf=max_depth_cfg * 1.25, neginf=0.0)
-            pred_depth = pred_depth.clamp_(min=min_depth_cfg * 0.5, max=max_depth_cfg * 1.25)
-            mask_depth = (gt_depth >= min_depth_cfg) & (gt_depth <= max_depth_cfg) & torch.isfinite(gt_depth)
+            pred_depth = pred_depth.clamp_(min=min_safe_depth, max=max_depth_cfg * 1.25)
+            mask_depth = (gt_depth >= min_safe_depth) & (gt_depth <= max_depth_cfg) & torch.isfinite(gt_depth)
+            mask_depth = self._apply_dataset_masks(batch_depth, mask_depth)
             valid_depth = int(mask_depth.sum().item())
             if valid_depth == 0:
                 loss_depth = (pred_depth.sum() * 0.0).to(pred_depth.dtype)
@@ -750,6 +875,7 @@ class MultiTaskTrainer(BaseTrainer):
                             loss_depth = loss_depth + self._camera_backbone_weight * camera_loss
                             camera_loss_applied = True
 
+        with autocast(enabled=False, **self.autocast_kwargs):
             weighted_loss_depth = self.loss_weighter.get_loss(
                 loss_depth, torch.tensor(0.0, device=loss_depth.device), task='depth'
             )
@@ -1017,7 +1143,8 @@ class MultiTaskTrainer(BaseTrainer):
                 self._rescale_camera_head_grads(camera_loss_applied)
 
             max_norm = getattr(self.config, 'clip_grad_norm', 1.0)
-            torch.nn.utils.clip_grad_norm_([p for p in self.model.parameters() if p.requires_grad], max_norm=max_norm)
+            if max_norm and max_norm > 0:
+                torch.nn.utils.clip_grad_norm_([p for p in self.model.parameters() if p.requires_grad], max_norm=max_norm)
 
             if self.config.mixed_precision and self.scaler is not None:
                 grads_ok = True

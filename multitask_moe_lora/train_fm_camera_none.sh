@@ -15,8 +15,8 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=${NUM_GPUS:-3}
-CUDA_DEVICES=${CUDA_DEVICES:-"3,4,5"}
+NUM_GPUS=${NUM_GPUS:-2}
+CUDA_DEVICES=${CUDA_DEVICES:-"2,3"}
 MASTER_PORT=${MASTER_PORT:-20863}
 
 # ------------------------------------------------------------------------------
@@ -40,9 +40,10 @@ CAMERA_LOSS_TYPE=${CAMERA_LOSS_TYPE:-"l2"}   # l1 | l2
 CAMERA_LR=${CAMERA_LR:-5e-4}
 
 FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
+FM_SAMPLE_SIZE=${FM_SAMPLE_SIZE:-10}
 TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
-VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-1}
-VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-100}
+VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:--1}
+VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-64}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
 
 # ------------------------------------------------------------------------------
@@ -57,7 +58,7 @@ MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET}
 
 
 TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
-VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoSynth,EndoVis2017"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoVis2017"}
 
 # ------------------------------------------------------------------------ ------
 # Checkpoint configuration
