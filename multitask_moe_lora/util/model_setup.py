@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.distributed as dist
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR
 import logging
 from typing import Tuple, Dict, Any, Optional
 
@@ -493,7 +494,7 @@ def setup_optimizers_and_schedulers(model: torch.nn.Module,
         trainable_params.append(loss_weighter.log_vars)
 
     optimizer = AdamW(trainable_params, lr=config.lr, weight_decay=config.weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.epochs)
+    scheduler = _create_lr_scheduler(optimizer, config, logger)
     results["optimizer_unified"] = optimizer
     results["scheduler_unified"] = scheduler
     return results
@@ -556,3 +557,23 @@ def setup_complete_model(config: TrainingConfig, logger: logging.Logger):
         "loss_weighter": loss_weighter,
         "start_epoch": start_epoch,
     }
+def _create_lr_scheduler(optimizer: torch.optim.Optimizer,
+                         config: TrainingConfig,
+                         logger: logging.Logger):
+    scheduler_type = (getattr(config, "lr_scheduler", "cosine") or "cosine").lower()
+    total_epochs = max(int(getattr(config, "epochs", 1)), 1)
+    if scheduler_type == "poly":
+        power = float(getattr(config, "poly_power", 0.9))
+
+        def _poly_lambda(epoch: int) -> float:
+            progress = min(epoch, total_epochs) / total_epochs
+            return (1.0 - progress) ** power
+
+        logger.info(f"Using polynomial LR scheduler (power={power:.3f}).")
+        return LambdaLR(optimizer, lr_lambda=_poly_lambda)
+
+    if scheduler_type == "cosine":
+        logger.info("Using cosine LR scheduler.")
+        return CosineAnnealingLR(optimizer, T_max=total_epochs)
+
+    raise ValueError(f"Unsupported lr_scheduler '{scheduler_type}'.")

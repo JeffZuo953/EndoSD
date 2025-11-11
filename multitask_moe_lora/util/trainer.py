@@ -10,7 +10,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 import logging
-from typing import Optional, Any, Dict, Tuple
+from typing import Optional, Any, Dict, Tuple, List, Set
 from itertools import cycle
 import math
 from collections import Counter
@@ -214,32 +214,9 @@ class MultiTaskTrainer(BaseTrainer):
         if current_size == 1:
             return mask_tensor.expand(batch_size, -1, -1, -1).contiguous()
 
-        if current_size < batch_size:
-            if self.rank == 0:
-                missing_indices = range(current_size, batch_size)
-                missing_meta = ", ".join(
-                    self._format_dataset_meta(dataset_entries[i], source_entries[i]) for i in missing_indices
-                )
-                self.logger.warning(
-                    "Dataset mask smaller than batch (%s vs %s). Padding missing entries with all-True mask. Missing samples: %s",
-                    mask_tensor.shape, (batch_size, *mask_tensor.shape[1:]), missing_meta or "unknown"
-                )
-                pad_shape = (batch_size - current_size, *mask_tensor.shape[1:])
-                pad = torch.ones(pad_shape, dtype=torch.bool, device=device)
-                return torch.cat([mask_tensor, pad], dim=0)
-
-        # current_size > batch_size : trim extra entries (shouldn't happen but keep safe)
-        if self.rank == 0:
-            extra_indices = range(batch_size, current_size)
-            extra_meta = ", ".join(
-                self._format_dataset_meta(dataset_entries[i], source_entries[i] if i < len(source_entries) else None)
-                for i in extra_indices if i < len(dataset_entries)
-            )
-            self.logger.warning(
-                "Dataset mask larger than batch (%s vs %s). Truncating extra entries. Extra samples: %s",
-                mask_tensor.shape, (batch_size, *mask_tensor.shape[1:]), extra_meta or "unknown"
-            )
-        return mask_tensor[:batch_size]
+        if current_size != batch_size:
+            return None
+        return mask_tensor
 
     def _apply_dataset_masks(self, batch: Dict[str, Any], mask_depth: torch.Tensor) -> torch.Tensor:
         batch_size = mask_depth.shape[0]
@@ -253,9 +230,6 @@ class MultiTaskTrainer(BaseTrainer):
             batch, mask_depth.device, batch_size, dataset_entries, source_entries
         )
         if dataset_mask is None:
-            if self.rank == 0:
-                dataset_meta = batch.get("dataset_name") or batch.get("source_type")
-                self.logger.warning("Requested dataset mask but none found for batch meta: %s", dataset_meta)
             return mask_depth
 
         if dataset_mask.shape[0] != batch_size:
@@ -266,6 +240,48 @@ class MultiTaskTrainer(BaseTrainer):
         updated_mask = mask_depth.clone()
         updated_mask[selector] = updated_mask[selector] & dataset_mask[selector]
         return updated_mask
+
+    def _extract_dataset_names(self, batch: Optional[Dict[str, Any]]) -> List[str]:
+        if not isinstance(batch, dict):
+            return []
+        names = batch.get("dataset_name")
+        if names is None:
+            names = batch.get("source_type")
+        if isinstance(names, (list, tuple)):
+            iterable = names
+        elif names is None:
+            iterable = []
+        else:
+            iterable = [names]
+        normalized = []
+        for entry in iterable:
+            if entry is None:
+                continue
+            normalized.append(str(entry).strip().lower())
+        return [name for name in normalized if name]
+
+    def _handle_nonfinite_skip(self,
+                               batches: Optional[List[Optional[Dict[str, Any]]]],
+                               epoch: int,
+                               iteration: int) -> None:
+        batch_list = batches or []
+        if not batch_list:
+            batch_list = [getattr(self, "_last_depth_batch", None)]
+        recorded_names: Set[str] = set()
+        for batch in batch_list:
+            for name in self._extract_dataset_names(batch):
+                recorded_names.add(name)
+        if recorded_names:
+            joined = ", ".join(sorted(recorded_names))
+            self.logger.warning(
+                "[Train][Epoch %d][Iter %d] Non-finite gradients detected; affected dataset(s): %s",
+                epoch, iteration, joined
+            )
+        elif self.rank == 0:
+            self.logger.warning(
+                "[Train][Epoch %d][Iter %d] Non-finite gradients encountered but dataset metadata unavailable.",
+                epoch, iteration
+            )
 
     def _rescale_camera_head_grads(self, camera_loss_applied: bool) -> None:
         if not camera_loss_applied:
@@ -349,17 +365,23 @@ class MultiTaskTrainer(BaseTrainer):
             tracker['started'].add(primary)
         if isinstance(total, int) and total > 0:
             progress = processed / total
+            seen = tracker['milestones'].setdefault(primary, set())
+            thirds = (1/3, 2/3)
+            for fraction in thirds:
+                if progress >= fraction and fraction not in seen:
+                    seen.add(fraction)
+                    percent = round(fraction * 100)
+                    self.logger.info(
+                        f"[{phase}][{task}][Epoch {epoch}] {primary} ({dataset_type}) progress ~{percent}% ({processed}/{total})")
             if progress >= 1.0 and primary not in tracker['completed']:
                 self.logger.info(f"[{phase}][{task}][Epoch {epoch}] Finished dataset {primary} ({dataset_type}) ({processed}/{total})")
                 tracker['completed'].add(primary)
             else:
                 milestone = math.floor(progress * 10) / 10.0
-                if milestone >= 0.1 and milestone < 1.0:
-                    seen = tracker['milestones'].setdefault(primary, set())
-                    if milestone not in seen:
-                        seen.add(milestone)
-                        percent = int(milestone * 100)
-                        self.logger.info(f"[{phase}][{task}][Epoch {epoch}] {primary} ({dataset_type}) progress {percent}% ({processed}/{total})")
+                if milestone >= 0.1 and milestone < 1.0 and milestone not in seen:
+                    seen.add(milestone)
+                    percent = int(milestone * 100)
+                    self.logger.info(f"[{phase}][{task}][Epoch {epoch}] {primary} ({dataset_type}) progress {percent}% ({processed}/{total})")
 
     def _to_float_tensor(self, value: Any, device: torch.device) -> torch.Tensor:
         """Convert arbitrary values (lists, numpy arrays, tensors) to float32 tensors on the desired device."""
@@ -688,7 +710,8 @@ class MultiTaskTrainer(BaseTrainer):
         total_camera_loss = 0.0
         depth_batches, seg_batches, camera_batches = 0, 0, 0
 
-        def _step_optimizer(i: int) -> bool:
+        def _step_optimizer(i: int,
+                            batch_metas: Optional[List[Optional[Dict[str, Any]]]] = None) -> bool:
             if self.config.mixed_precision and self.scaler is not None:
                 self.scaler.unscale_(self.optimizer_unified)
 
@@ -726,10 +749,7 @@ class MultiTaskTrainer(BaseTrainer):
                 self.optimizer_unified.zero_grad(set_to_none=True)
                 if getattr(self.loss_weighter, "log_vars", None) is not None and self.loss_weighter.log_vars.grad is not None:
                     self.loss_weighter.log_vars.grad.zero_()
-                if self._save_bad_batches:
-                    self._dump_bad_batch(epoch, i, bad_params)
-                if self._save_bad_snapshots:
-                    self._dump_bad_snapshot(epoch, i)
+                self._handle_nonfinite_skip(batch_metas, epoch, i)
                 return False
 
             if self.config.mixed_precision and self.scaler is not None:
@@ -761,6 +781,8 @@ class MultiTaskTrainer(BaseTrainer):
                 loss_depth, weighted_loss_depth, camera_loss, camera_loss_applied = depth_stats
 
                 self._log_dataset_progress("Train", "Seg", epoch, batch_seg.get("dataset_name"), seg_tracker)
+                loss_seg_value: Optional[torch.Tensor] = None
+                weighted_loss_seg: Optional[torch.Tensor] = None
                 with autocast(enabled=self.config.mixed_precision, **self.autocast_kwargs):
                     img_seg = batch_seg["image"].cuda()
                     gt_seg = batch_seg["semseg_mask"].cuda().long()
@@ -774,22 +796,27 @@ class MultiTaskTrainer(BaseTrainer):
                         loss_seg = self.seg_criterion(pred_seg, gt_seg)
                     weighted_loss_seg = self.loss_weighter.get_loss(
                         torch.tensor(0.0, device=loss_seg.device), loss_seg, task='seg')
+                    loss_seg_value = loss_seg
 
                 self._backward_depth(weighted_loss_depth, camera_loss_applied)
-                if self.config.mixed_precision and self.scaler is not None:
-                    self.scaler.scale(weighted_loss_seg).backward()
-                else:
-                    weighted_loss_seg.backward()
+                if weighted_loss_seg is not None:
+                    if self.config.mixed_precision and self.scaler is not None:
+                        self.scaler.scale(weighted_loss_seg).backward()
+                    else:
+                        weighted_loss_seg.backward()
 
                 total_depth_loss += loss_depth.item()
-                total_seg_loss += loss_seg.item()
                 depth_batches += 1
-                seg_batches += 1
+                if loss_seg_value is not None:
+                    total_seg_loss += loss_seg_value.item()
+                    seg_batches += 1
                 if camera_loss is not None:
                     total_camera_loss += camera_loss.item()
                     camera_batches += 1
 
-                if not _step_optimizer(i):
+                batch_metas = [batch_depth, batch_seg]
+
+                if not _step_optimizer(i, batch_metas):
                     continue
 
                 self._log_step_uwl()
@@ -807,7 +834,7 @@ class MultiTaskTrainer(BaseTrainer):
                     total_camera_loss += camera_loss.item()
                     camera_batches += 1
 
-                if not _step_optimizer(i):
+                if not _step_optimizer(i, [batch_depth]):
                     continue
 
                 self._log_step_uwl()

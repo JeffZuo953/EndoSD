@@ -7,7 +7,7 @@ set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-4}
 export NCCL_DEBUG=${NCCL_DEBUG:-INFO}
-export TORCH_DISTRIBUTED_DEBUG=${TORCH_DISTRIBUTED_DEBUG:-DETAIL}
+export TORCH_DISTRIBUTED_DEBUG=${TORCH_DISTRIBUTED_DEBUG:-INFO}
 PARENT_DIR="$(dirname "$(pwd)")"
 export PYTHONPATH="$(pwd):${PARENT_DIR}:${PYTHONPATH:-}"
 export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
@@ -38,6 +38,7 @@ CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"prolike"}
 CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.2}
 CAMERA_LOSS_TYPE=${CAMERA_LOSS_TYPE:-"l2"}   # l1 | l2
 CAMERA_LR=${CAMERA_LR:-1e-5}
+LR_SCHEDULER=${LR_SCHEDULER:-"poly"}
 
 FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
 FM_SAMPLE_SIZE=${FM_SAMPLE_SIZE:-10}
@@ -156,6 +157,7 @@ BASE_CMD=(
     --camera-loss-weight "${CAMERA_LOSS_WEIGHT}"
     --camera-loss-type "${CAMERA_LOSS_TYPE}"
     --lr-camera "${CAMERA_LR}"
+    --lr-scheduler "${LR_SCHEDULER}"
 )
 if [[ -n "${MAX_SAMPLES_PER_DATASET}" ]]; then
     BASE_CMD+=(--max-samples-per-dataset "${MAX_SAMPLES_PER_DATASET}")
