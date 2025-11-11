@@ -11,8 +11,7 @@ export PYTHONPATH="$(dirname "$(pwd)"):${PYTHONPATH:-}"
 
 # Basic Configuration
 NUM_GPUS=1
-# CUDA_DEVICES="0,1,2"
-CUDA_DEVICES="0"
+CUDA_DEVICES="5"
 ENCODER="vits"              # vits | vitb | vitl | vitg | dinov3_vits16 | ...
 FEATURES=64
 NUM_CLASSES=4
@@ -41,8 +40,8 @@ LORA_R=4
 LORA_ALPHA=8
 
 # Data source configuration
-DATASET_CONFIG_NAME="no_ls_v1"  # server_sz | server_hk_01 | no_ls_v1
-PATH_TRANSFORM_NAME="no_ls_default"      # sz_to_hk | no_ls_default | none
+DATASET_CONFIG_NAME="no_bundle"
+PATH_TRANSFORM_NAME="none"
 MAX_SAMPLES_PER_DATASET=10
 
 # Loss weighting strategy: fixed | uwl | dwa
