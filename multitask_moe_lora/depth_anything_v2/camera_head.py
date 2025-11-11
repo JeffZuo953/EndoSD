@@ -180,9 +180,9 @@ class ProLikeCameraHead(_BaseCameraHead):
             nn.ReLU(True),
             nn.Conv2d(num_features // 4, num_features // 8, kernel_size=3, stride=2, padding=1),
             nn.ReLU(True),
-            nn.Conv2d(num_features // 8, 4, kernel_size=6, stride=1, padding=0),
             nn.AdaptiveAvgPool2d(1),
         )
+        self.pred_layer = nn.Conv2d(num_features // 8, 4, kernel_size=1)
 
     def forward(self, patch_tokens: torch.Tensor, patch_h: Optional[int] = None, patch_w: Optional[int] = None) -> torch.Tensor:
         bsz, num_patches, channels = patch_tokens.shape
@@ -193,5 +193,6 @@ class ProLikeCameraHead(_BaseCameraHead):
 
         tokens = self.input_adapter(patch_tokens)
         feature_map = tokens.transpose(1, 2).reshape(bsz, channels, patch_h, patch_w).contiguous()
-        logits = self.conv_head(feature_map).flatten(1)
+        conv_features = self.conv_head(feature_map)
+        logits = self.pred_layer(conv_features).flatten(1)
         return self._normalize_output(logits)

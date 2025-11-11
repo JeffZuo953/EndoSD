@@ -16,7 +16,7 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
 NUM_GPUS=${NUM_GPUS:-3}
-CUDA_DEVICES=${CUDA_DEVICES:-"3,4,5"}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,1,2"}
 MASTER_PORT=${MASTER_PORT:-20765}
 
 # ------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ DATASET_MODALITY=${DATASET_MODALITY:-"fd"}
 PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 
 TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
-VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoSynth,EndoVis2017"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoVis2017"}
 ORIG_TRAIN_DATASET_INCLUDE="${TRAIN_DATASET_INCLUDE}"
 ORIG_VAL_DATASET_INCLUDE="${VAL_DATASET_INCLUDE}"
 

@@ -15,17 +15,17 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=${NUM_GPUS:-2}
-CUDA_DEVICES=${CUDA_DEVICES:-"0,1"}
+NUM_GPUS=${NUM_GPUS:-3}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,1,2"}
 MASTER_PORT=${MASTER_PORT:-20765}
 
 # ------------------------------------------------------------------------------
 # Core training hyper-parameters
 # ------------------------------------------------------------------------------
-ENCODER=${ENCODER:-"vits"}        # {vits, vitb, vitl, dinov3_*}
+ENCODER=${ENCODER:-"vitb"}        # {vits, vitb, vitl, dinov3_*}
 FEATURES=${FEATURES:-64}
 EPOCHS=${EPOCHS:-120}
-BATCH_SIZE=${BATCH_SIZE:-36}
+BATCH_SIZE=${BATCH_SIZE:-18}
 VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-64}
 LEARNING_RATE=${LEARNING_RATE:-5e-6}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
@@ -41,7 +41,7 @@ CAMERA_LR=${CAMERA_LR:-1e-5}
 LR_SCHEDULER=${LR_SCHEDULER:-"poly"}
 
 FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
-TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-300}
+TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
 VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:--1}
 VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-64}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
@@ -57,7 +57,8 @@ DATASET_MODALITY=${DATASET_MODALITY:-"fd"}
 PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 
 TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
-VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoSynth,EndoVis2017"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoVis2017"}
+
 ORIG_TRAIN_DATASET_INCLUDE="${TRAIN_DATASET_INCLUDE}"
 ORIG_VAL_DATASET_INCLUDE="${VAL_DATASET_INCLUDE}"
 
@@ -66,7 +67,7 @@ ORIG_VAL_DATASET_INCLUDE="${VAL_DATASET_INCLUDE}"
 # ------------------------------------------------------------------------------
 BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
 HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
-PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vits.pth"}
+PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vitb.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
 # ------------------------------------------------------------------------------

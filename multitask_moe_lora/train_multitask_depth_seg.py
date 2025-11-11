@@ -77,6 +77,16 @@ def main():
             _log_loader_summary(val_depth_loader, "Val-Depth datasets")
             _log_loader_summary(val_seg_loader, "Val-Seg datasets")
         
+        steps_per_epoch = 0
+        try:
+            if train_depth_loader is not None:
+                steps_per_epoch = len(train_depth_loader)
+            if train_seg_loader is not None:
+                steps_per_epoch = max(steps_per_epoch, len(train_seg_loader))
+        except TypeError:
+            steps_per_epoch = 0
+        config.train_steps_per_epoch = steps_per_epoch
+        
         # 6. 设置模型、优化器和调度器
         setup_bundle = setup_complete_model(config, logger)
         model = setup_bundle["model"]

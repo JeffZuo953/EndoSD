@@ -57,6 +57,8 @@ class MultiTaskTrainer(BaseTrainer):
         self.optimizer_unified = optimizer_unified
         self.scheduler_unified = scheduler_unified
 
+        self._scheduler_step_on_iter = bool(getattr(self.scheduler_unified, "_step_on_iteration", False))
+
         self.loss_weighter = loss_weighter
         min_depth_cfg = float(getattr(self.config, 'min_depth', 1e-6) or 1e-6)
         self._min_safe_depth = max(min_depth_cfg, 1e-5)
@@ -754,10 +756,14 @@ class MultiTaskTrainer(BaseTrainer):
 
             if self.config.mixed_precision and self.scaler is not None:
                 self.scaler.step(self.optimizer_unified)
+                if self._scheduler_step_on_iter and self.scheduler_unified is not None:
+                    self.scheduler_unified.step()
                 self.loss_weighter.sanitize_parameters()
                 self.scaler.update()
             else:
                 self.optimizer_unified.step()
+                if self._scheduler_step_on_iter and self.scheduler_unified is not None:
+                    self.scheduler_unified.step()
                 self.loss_weighter.sanitize_parameters()
             return True
 
@@ -1208,7 +1214,8 @@ class MultiTaskTrainer(BaseTrainer):
 
     def step_schedulers(self) -> None:
         if self.scheduler_unified:
-            self.scheduler_unified.step()
+            if not self._scheduler_step_on_iter:
+                self.scheduler_unified.step()
         else:
             if self.scheduler_depth:
                 self.scheduler_depth.step()
