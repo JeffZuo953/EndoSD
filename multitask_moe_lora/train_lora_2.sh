@@ -104,6 +104,7 @@ VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-36}
 LEARNING_RATE=${LEARNING_RATE:-5e-5}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
 IMG_SIZE=${IMG_SIZE:-518}
+SAVE_INTERVAL=${SAVE_INTERVAL:-5}
 USE_MIXED_PRECISION=${USE_MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 
@@ -272,12 +273,13 @@ TRAIN_CMD=(
     --lr "${LEARNING_RATE}"
     --weight-decay "${WEIGHT_DECAY}"
     --img-size "${IMG_SIZE}"
+    --save-interval "${SAVE_INTERVAL}"
     --mode "${MODE}"
     --dataset-config-name "${DATASET_CONFIG_NAME}"
     --path-transform-name "${PATH_TRANSFORM_NAME}"
     --dataset-modality "${DATASET_MODALITY}"
     --save-path "${SAVE_PATH}"
-    --checkpoint-policy "latest-only"
+    --checkpoint-policy "full"
 )
 
 if [[ -n "${TRAIN_DATASET_INCLUDE}" ]]; then

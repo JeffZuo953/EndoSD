@@ -29,6 +29,7 @@ LR_DEPTH=""                 # e.g., 5e-6 (overrides --lr for depth)
 LR_SEG=""                   # e.g., 1.5e-5 (overrides --lr*10 for seg)
 WEIGHT_DECAY=0.01
 IMG_SIZE=518
+SAVE_INTERVAL=${SAVE_INTERVAL:-5}
 FROZEN_BACKBONE="ture"
 USE_MIXED_PRECISION=true  # disabled for stability.
 
@@ -159,6 +160,7 @@ TRAIN_CMD="python -m torch.distributed.run --nproc_per_node=${NUM_GPUS} --master
 --lr ${LEARNING_RATE} \
 --weight-decay ${WEIGHT_DECAY} \
 --img-size ${IMG_SIZE} \
+--save-interval ${SAVE_INTERVAL} \
 --save-path \"${SAVE_PATH}\""
 
 # Conditionally add task-specific LRs only when set
@@ -200,7 +202,7 @@ TRAIN_CMD="${TRAIN_CMD} --mode ${MODE} \
 --dwa-temperature ${DWA_TEMPERATURE} \
 --dataset-config-name ${DATASET_CONFIG_NAME} \
 --path-transform-name ${PATH_TRANSFORM_NAME} \
---checkpoint-policy latest-only"
+--checkpoint-policy full"
 
 echo "Starting multi-task training..."
 echo "Training command: ${TRAIN_CMD}"

@@ -2,7 +2,7 @@ import torch
 import time
 
 # 定义要占用的GPU列表
-gpus = [1, 2, 3, 4, 5]
+gpus = [0, 1]
 
 # 设置每个GPU占用约5000MB内存 
 memory_per_gpu = 5000  # MB

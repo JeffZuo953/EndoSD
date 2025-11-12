@@ -4,6 +4,7 @@
 """
 
 import logging
+import math
 from typing import Dict, Any, Optional
 import torch
 
@@ -55,7 +56,7 @@ class CheckpointManager:
         self.logger = logger
         self.rank = rank
         self._saved_checkpoints: Dict[str, int] = {}
-        
+
         # 初始化最佳指标跟踪器
         self.best_metrics = {
             "NO": {"absrel": float('inf'), "miou": float('-inf'), "miou_minus_absrel": float('-inf')},
@@ -63,6 +64,7 @@ class CheckpointManager:
             "combined": {"absrel": float('inf'), "miou": float('-inf'), "miou_minus_absrel": float('-inf')},
         }
         self.dataset_best_absrel: Dict[str, float] = {}
+        self.best_overall_score: float = float('-inf')
 
     def save(self, epoch: int, suffix: str):
         """调用底层的 save_checkpoint 函数"""
@@ -100,21 +102,21 @@ class CheckpointManager:
         # 1. 保存最新的检查点
         self.save(epoch, "latest")
 
-        if getattr(self.config, "checkpoint_policy", "full") == "latest-only":
-            return
+        policy = getattr(self.config, "checkpoint_policy", "full")
 
         epoch_one_based = epoch + 1
+        save_interval = max(1, int(getattr(self.config, "save_interval", 1)))
 
         save_epoch_snapshot = (
             self.config.massive_checkpoint
             or 45 <= epoch_one_based <= 55
-            or epoch_one_based % 5 == 0
+            or epoch_one_based % save_interval == 0
         )
-        if save_epoch_snapshot:
+        if save_epoch_snapshot and policy != "latest-only":
             self.save(epoch, f"epoch_{epoch_one_based}")
 
         # 2.3 每100个epoch保存一次完整检查点
-        if epoch_one_based % 100 == 0:
+        if policy != "latest-only" and epoch_one_based % 100 == 0:
             self.save(epoch, f"full_epoch_{epoch_one_based}")
 
         # 3. 基于指标的最佳检查点保存
@@ -160,6 +162,21 @@ class CheckpointManager:
                         self.save(epoch, f"best_miou_minus_absrel_{a_type}")
                         if self.rank == 0:
                             self.logger.info(f"New best miou-absrel for {a_type}: {current_miou_minus_absrel:.4f} at epoch {epoch}")
+
+                if a_type == "combined":
+                    if math.isfinite(current_absrel):
+                        if math.isfinite(current_miou):
+                            overall_score = current_miou_minus_absrel
+                        else:
+                            overall_score = -current_absrel
+                    else:
+                        overall_score = current_miou if math.isfinite(current_miou) else float('-inf')
+
+                    if overall_score > self.best_overall_score:
+                        self.best_overall_score = overall_score
+                        self.save(epoch, "best_overall")
+                        if self.rank == 0:
+                            self.logger.info(f"New overall best score={overall_score:.4f} at epoch {epoch}")
 
         # 数据集级别最佳指标
         for dataset_name, metrics in dataset_metrics.items():

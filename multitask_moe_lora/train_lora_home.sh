@@ -105,6 +105,7 @@ VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-36}
 LEARNING_RATE=${LEARNING_RATE:-5e-5}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
 IMG_SIZE=${IMG_SIZE:-518}
+SAVE_INTERVAL=${SAVE_INTERVAL:-5}
 USE_MIXED_PRECISION=${USE_MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 
@@ -207,7 +208,9 @@ fi
 ###############################################
 # Paths / logging
 ###############################################
+# Canonical prefix stays at /data for path rewriting while BASE_DATA_PATH points to the real mount.
 BASE_DATA_PATH=${BASE_DATA_PATH:-"/mnt/DATA/ziyi/multitask"}
+BASE_DATA_PREFIX=${BASE_DATA_PREFIX:-"/data/ziyi/multitask"}
 PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"/home/ziyi/checkpoint_38.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
@@ -243,6 +246,8 @@ fi
 
 export CUDA_VISIBLE_DEVICES=${CUDA_DEVICES}
 export WORLD_SIZE=${NUM_GPUS}
+export BASE_DATA_PREFIX
+export BASE_DATA_PATH
 export MASTER_ADDR=localhost
 if [[ -z "${MASTER_PORT:-}" ]]; then
     MASTER_PORT=$(pick_master_port 2>/dev/null || true)
@@ -274,12 +279,13 @@ TRAIN_CMD=(
     --weight-decay "${WEIGHT_DECAY}"
     --img-size "${IMG_SIZE}"
     --camera-head-mode "${CAMERA_HEAD_MODE}"
+    --save-interval "${SAVE_INTERVAL}"
     --mode "${MODE}"
     --dataset-config-name "${DATASET_CONFIG_NAME}"
     --path-transform-name "${PATH_TRANSFORM_NAME}"
     --dataset-modality "${DATASET_MODALITY}"
     --save-path "${SAVE_PATH}"
-    --checkpoint-policy "latest-only"
+    --checkpoint-policy "full"
 )
 
 if [[ -n "${TRAIN_DATASET_INCLUDE}" ]]; then
