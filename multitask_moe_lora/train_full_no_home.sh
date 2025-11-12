@@ -87,8 +87,8 @@ fi
 ###############################################
 # Shared knobs (override via environment vars)
 ###############################################
-NUM_GPUS=${NUM_GPUS:-1}
-CUDA_DEVICES=${CUDA_DEVICES:-"5"}
+NUM_GPUS=${NUM_GPUS:-2}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,2"}
 ENCODER=${ENCODER:-"vitb"}
 FEATURES=${FEATURES:-64}
 NUM_CLASSES=${NUM_CLASSES:-10}
@@ -96,11 +96,12 @@ MAX_DEPTH=${MAX_DEPTH:-0.3}
 # Use depth feature taps for segmentation to ensure identical layers
 SEG_INPUT_TYPE=${SEG_INPUT_TYPE:-"from_depth"}
 SEG_HEAD_TYPE=${SEG_HEAD_TYPE:-"linear"}
+CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"simple"}
 
-EPOCHS=${EPOCHS:-50}
-BATCH_SIZE=${BATCH_SIZE:-12}
-SEG_BATCH_SIZE=${SEG_BATCH_SIZE:-12}
-VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-36}
+EPOCHS=${EPOCHS:-25}
+BATCH_SIZE=${BATCH_SIZE:-9}
+SEG_BATCH_SIZE=${SEG_BATCH_SIZE:-7}
+VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-32}
 LEARNING_RATE=${LEARNING_RATE:-5e-5}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
 IMG_SIZE=${IMG_SIZE:-518}
@@ -109,10 +110,10 @@ USE_MIXED_PRECISION=${USE_MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 
 # Mode selection: original | lora-only | legacy-lora | endo-unid | mtlora | mtlga
-MODE=${MODE:-"legacy-lora"}
+MODE=${MODE:-"original"}
 
 # Dataset profile: ENDO (EndoSynth-only), NO (multi-domain no_bundle), LS (ls_bundle)
-DATA_PROFILE=${DATA_PROFILE_CLI:-${DATA_PROFILE:-"ENDO"}}
+DATA_PROFILE=${DATA_PROFILE_CLI:-${DATA_PROFILE:-"NO"}}
 DATA_PROFILE=$(echo "${DATA_PROFILE}" | tr '[:lower:]' '[:upper:]')
 if [[ "${DATA_PROFILE}" == "ENDOSYNTH" ]]; then
     DATA_PROFILE="ENDO"
@@ -207,8 +208,10 @@ fi
 ###############################################
 # Paths / logging
 ###############################################
-BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
-PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/save/FM/fd_vitb_fd_depth_fm_v1_camera_simple_train1_20251111_131329/checkpoint_epoch_30.pth"}
+# Canonical prefix stays at /data for path rewriting while BASE_DATA_PATH points to the real mount.
+BASE_DATA_PATH=${BASE_DATA_PATH:-"/mnt/DATA/ziyi/multitask"}
+BASE_DATA_PREFIX=${BASE_DATA_PREFIX:-"/data/ziyi/multitask"}
+PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"/home/ziyi/checkpoint_38.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
 DEBUG_SUFFIX=""
@@ -243,6 +246,8 @@ fi
 
 export CUDA_VISIBLE_DEVICES=${CUDA_DEVICES}
 export WORLD_SIZE=${NUM_GPUS}
+export BASE_DATA_PREFIX
+export BASE_DATA_PATH
 export MASTER_ADDR=localhost
 if [[ -z "${MASTER_PORT:-}" ]]; then
     MASTER_PORT=$(pick_master_port 2>/dev/null || true)
@@ -273,6 +278,7 @@ TRAIN_CMD=(
     --lr "${LEARNING_RATE}"
     --weight-decay "${WEIGHT_DECAY}"
     --img-size "${IMG_SIZE}"
+    --camera-head-mode "${CAMERA_HEAD_MODE}"
     --save-interval "${SAVE_INTERVAL}"
     --mode "${MODE}"
     --dataset-config-name "${DATASET_CONFIG_NAME}"
