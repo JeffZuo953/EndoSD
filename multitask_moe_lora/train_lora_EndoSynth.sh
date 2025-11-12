@@ -49,6 +49,7 @@ case "${DATA_PROFILE}" in
         DATASET_MODALITY="mt"
         TRAIN_DATASET_INCLUDE="EndoSynth"
         VAL_DATASET_INCLUDE="EndoSynth"
+        PROFILE_NUM_CLASSES=10
         ;;
     NO)
         DATASET_CONFIG_NAME="no_bundle"
@@ -56,6 +57,7 @@ case "${DATA_PROFILE}" in
         DATASET_MODALITY="mt"
         TRAIN_DATASET_INCLUDE=""
         VAL_DATASET_INCLUDE=""
+        PROFILE_NUM_CLASSES=4
         ;;
     LS)
         DATASET_CONFIG_NAME="ls_bundle"
@@ -63,12 +65,15 @@ case "${DATA_PROFILE}" in
         DATASET_MODALITY="mt"
         TRAIN_DATASET_INCLUDE=""
         VAL_DATASET_INCLUDE=""
+        PROFILE_NUM_CLASSES=10
         ;;
     *)
         echo "Unsupported DATA_PROFILE='${DATA_PROFILE}'. Choose ENDO | NO | LS."
         exit 1
         ;;
 esac
+
+NUM_CLASSES=${NUM_CLASSES:-${PROFILE_NUM_CLASSES}}
 
 ###############################################
 # Mode-specific defaults / extras

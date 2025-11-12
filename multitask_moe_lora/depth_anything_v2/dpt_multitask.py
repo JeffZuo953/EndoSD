@@ -255,7 +255,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
         """获取当前编码器对应的 patch size"""
         return self.patch_sizes.get(self.encoder, 14)  # 默认为14
 
-    def forward_features(self, x, task='both'):
+    def forward_features(self, x, task='both', return_features=False):
         """提取任务特定特征"""
         h, w = x.shape[-2:]
 
@@ -338,7 +338,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
             dict: 包含预测结果的字典
         """
         # 提取任务特定特征
-        feature_results, h, w = self.forward_features(x, task)
+        feature_results, h, w = self.forward_features(x, task, return_features=return_features)
 
         results = {}
 

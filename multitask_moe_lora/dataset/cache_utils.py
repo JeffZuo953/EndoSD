@@ -244,6 +244,9 @@ class DepthCacheDataset(Dataset):
                 print(f"[DepthCacheDataset] Skipped {missing_count} missing cache files for {dataset_name or filelist_path}.")
             self.filelist = existing_paths
         self.dataset_name_lower = (self.dataset_name or "unknown").lower()
+        base_normalized = self.dataset_name_lower.split("[", 1)[0]
+        self.dataset_name_base_lower = base_normalized or self.dataset_name_lower
+        self.dataset_name_base = (self.dataset_name or "unknown").split("[", 1)[0] or self.dataset_name
         self._force_depth_positive_valid_mask = _should_force_depth_positive_mask(self.dataset_name)
         self._missing_camera_datasets: Set[str] = set()
         self.active_filelist_path = candidate_filelist
@@ -457,18 +460,20 @@ class DepthCacheDataset(Dataset):
                 base_height = float(size_value[1])
 
         dataset_key = self.dataset_name_lower
-        skip_camera = dataset_key in SKIP_CAMERA_DATASETS
+        dataset_base_key = getattr(self, "dataset_name_base_lower", dataset_key)
+        skip_camera = dataset_base_key in SKIP_CAMERA_DATASETS
         camera_info = None
+        camera_lookup_name = getattr(self, "dataset_name_base", self.dataset_name or "")
         if not skip_camera:
-            camera_info = get_camera_info(self.dataset_name or "", original_image_path)
+            camera_info = get_camera_info(camera_lookup_name, original_image_path)
         if camera_info is None:
-            if not skip_camera and dataset_key not in self._missing_camera_datasets:
+            if not skip_camera and dataset_base_key not in self._missing_camera_datasets:
                 logger.error(
                     "[DepthCacheDataset] Missing camera metadata for dataset '%s'; skipping camera intrinsics for %s.",
-                    self.dataset_name or "unknown",
+                    camera_lookup_name or (self.dataset_name or "unknown"),
                     original_image_path,
                 )
-                self._missing_camera_datasets.add(dataset_key)
+                self._missing_camera_datasets.add(dataset_base_key)
         else:
             intrinsic_tensor = camera_info.intrinsics.clone().to(torch.float32)
             base_width = float(camera_info.width)

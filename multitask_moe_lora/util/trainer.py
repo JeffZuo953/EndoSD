@@ -852,6 +852,8 @@ class MultiTaskTrainer(BaseTrainer):
                 self.optimizer_unified.zero_grad()
                 depth_stats = self._run_depth_step(batch_depth, depth_tracker, epoch)
                 loss_depth, weighted_loss_depth, camera_loss, camera_loss_applied = depth_stats
+                # Run depth backward immediately to avoid keeping multiple forward graphs
+                self._backward_depth(weighted_loss_depth, camera_loss_applied)
 
                 self._log_dataset_progress("Train", "Seg", epoch, batch_seg.get("dataset_name"), seg_tracker)
                 loss_seg_value: Optional[torch.Tensor] = None
@@ -874,7 +876,6 @@ class MultiTaskTrainer(BaseTrainer):
                         torch.tensor(0.0, device=loss_seg.device), loss_seg, task='seg')
                     loss_seg_value = loss_seg
 
-                self._backward_depth(weighted_loss_depth, camera_loss_applied)
                 if weighted_loss_seg is not None:
                     if self.config.mixed_precision and self.scaler is not None:
                         self.scaler.scale(weighted_loss_seg).backward()
