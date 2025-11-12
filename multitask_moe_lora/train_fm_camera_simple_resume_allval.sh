@@ -15,8 +15,8 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=${NUM_GPUS:-3}
-CUDA_DEVICES=${CUDA_DEVICES:-"0,1,2"}
+NUM_GPUS=${NUM_GPUS:-4}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,1,2,5"}
 MASTER_PORT=${MASTER_PORT:-20665}
 
 # ------------------------------------------------------------------------------
@@ -69,7 +69,7 @@ BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
 HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
 PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vitb.pth"}
 # 默认从指定实验的最新权重恢复
-RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-"/data/ziyi/multitask/save/FM/fd_vitb_fd_depth_fm_v1_camera_simple_train1_20251111_050042/checkpoint_latest.pth"}
+RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-"/data/ziyi/multitask/save/FM/fd_vitb_fd_depth_fm_v1_camera_simple_train1_20251111_131329/checkpoint_epoch_35.pth"}
 
 # ------------------------------------------------------------------------------
 # Output logging
