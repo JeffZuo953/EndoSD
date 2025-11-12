@@ -1,47 +1,47 @@
-[2025-11-12 18:11:00][ INFO] Config prepared: dataset=fd_depth_fm_v1, include=['hamlyn', 'EndoNeRF', 'C3VD', 'EndoMapper']
-[2025-11-12 18:11:04][ INFO] Loaded 4 datasets (27962 samples)
-[2025-11-12 18:11:04][ INFO]   EndoNeRF (LS): 156
-[2025-11-12 18:11:04][ INFO]   C3VD (NO): 10015
-[2025-11-12 18:11:04][ INFO]   EndoMapper (NO): 1919
-[2025-11-12 18:11:04][ INFO]   hamlyn (LS): 15872
-[2025-11-12 18:11:06][ INFO] Not in a distributed environment. Loading model to cuda:0.
-[2025-11-12 18:11:06][ INFO] Using DataParallel across GPUs: 0,1,2,3
-[2025-11-12 18:11:06][ INFO] Loading weights from checkpoint: /data/ziyi/multitask/save/FM/fd_vitb_fd_depth_fm_v1_camera_simple_train1_20251112_111942/checkpoint_best_absrel_combined.pth
-[2025-11-12 18:11:08][ INFO] Config mode: original, is_lora: False
-[2025-11-12 18:11:08][ INFO] --- Original Checkpoint Attention Keys (blocks.0.attn) ---
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.0.attn.proj.bias
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.0.attn.proj.weight
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.0.attn.qkv.bias
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.0.attn.qkv.weight
-[2025-11-12 18:11:08][ INFO] --- Model Attention Keys (blocks.0.attn) ---
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.0.attn.proj.bias
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.0.attn.proj.weight
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.0.attn.qkv.bias
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.0.attn.qkv.weight
-[2025-11-12 18:11:08][ INFO] ---------------------------------
-[2025-11-12 18:11:08][ INFO] [Original mode] Already plain: backbone.blocks.0.attn.qkv.weight
-[2025-11-12 18:11:08][ INFO] [MATCHED] backbone.blocks.0.attn.qkv.weight -> backbone.blocks.0.attn.qkv.weight
-[2025-11-12 18:11:08][ INFO] [Original mode] Already plain: backbone.blocks.0.attn.qkv.bias
-[2025-11-12 18:11:08][ INFO] [MATCHED] backbone.blocks.0.attn.qkv.bias -> backbone.blocks.0.attn.qkv.bias
-[2025-11-12 18:11:08][ INFO] [Original mode] Already plain: backbone.blocks.0.attn.proj.weight
-[2025-11-12 18:11:08][ INFO] [MATCHED] backbone.blocks.0.attn.proj.weight -> backbone.blocks.0.attn.proj.weight
-[2025-11-12 18:11:08][ INFO] [Original mode] Already plain: backbone.blocks.0.attn.proj.bias
-[2025-11-12 18:11:08][ INFO] [MATCHED] backbone.blocks.0.attn.proj.bias -> backbone.blocks.0.attn.proj.bias
-[2025-11-12 18:11:08][ INFO] --- Checkpoint Keys (first 5) ---
-[2025-11-12 18:11:08][ INFO]   - backbone.cls_token
-[2025-11-12 18:11:08][ INFO]   - backbone.pos_embed
-[2025-11-12 18:11:08][ INFO]   - backbone.mask_token
-[2025-11-12 18:11:08][ INFO]   - backbone.patch_embed.proj.weight
-[2025-11-12 18:11:08][ INFO]   - backbone.patch_embed.proj.bias
-[2025-11-12 18:11:08][ INFO] --- Model Keys (first 5) ---
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.9.attn.qkv.bias
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.3.ls1.gamma
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.7.mlp.fc1.weight
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.4.norm1.bias
-[2025-11-12 18:11:08][ INFO]   - backbone.blocks.5.ls2.gamma
-[2025-11-12 18:11:08][ INFO] ---------------------------------
-[2025-11-12 18:11:08][ INFO] Successfully loaded 269 parameters.
-[2025-11-12 18:11:08][ INFO] Skipped 0 parameters (non-matching or excluded).
-[2025-11-12 18:11:08][ INFO] Initialized 0 new parameters (not found in checkpoint or skipped).
-[2025-11-12 18:11:08][ INFO] Only model weights loaded. Optimizer, scheduler, and epoch are not restored.
-[2025-11-12 18:11:08][ INFO] Seg head disabled via config; skipping seg_head validation.
+[2025-11-12 19:07:57][ INFO] Config prepared: dataset=fd_depth_fm_v1, include=['hamlyn', 'EndoNeRF', 'C3VD', 'EndoMapper']
+[2025-11-12 19:08:03][ INFO] Loaded 4 datasets (27962 samples)
+[2025-11-12 19:08:03][ INFO]   EndoNeRF (LS): 156
+[2025-11-12 19:08:03][ INFO]   C3VD (NO): 10015
+[2025-11-12 19:08:03][ INFO]   EndoMapper (NO): 1919
+[2025-11-12 19:08:03][ INFO]   hamlyn (LS): 15872
+[2025-11-12 19:08:04][ INFO] Not in a distributed environment. Loading model to cuda:0.
+[2025-11-12 19:08:04][ INFO] Using DataParallel across GPUs: 0,1,2,3
+[2025-11-12 19:08:04][ INFO] Loading weights from checkpoint: /data/ziyi/multitask/save/FM/fd_vitb_fd_depth_fm_v1_camera_simple_train1_20251112_111942/checkpoint_best_absrel_combined.pth
+[2025-11-12 19:08:07][ INFO] Config mode: original, is_lora: False
+[2025-11-12 19:08:07][ INFO] --- Original Checkpoint Attention Keys (blocks.0.attn) ---
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.0.attn.proj.bias
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.0.attn.proj.weight
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.0.attn.qkv.bias
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.0.attn.qkv.weight
+[2025-11-12 19:08:07][ INFO] --- Model Attention Keys (blocks.0.attn) ---
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.0.attn.proj.bias
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.0.attn.proj.weight
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.0.attn.qkv.bias
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.0.attn.qkv.weight
+[2025-11-12 19:08:07][ INFO] ---------------------------------
+[2025-11-12 19:08:07][ INFO] [Original mode] Already plain: backbone.blocks.0.attn.qkv.weight
+[2025-11-12 19:08:07][ INFO] [MATCHED] backbone.blocks.0.attn.qkv.weight -> backbone.blocks.0.attn.qkv.weight
+[2025-11-12 19:08:07][ INFO] [Original mode] Already plain: backbone.blocks.0.attn.qkv.bias
+[2025-11-12 19:08:07][ INFO] [MATCHED] backbone.blocks.0.attn.qkv.bias -> backbone.blocks.0.attn.qkv.bias
+[2025-11-12 19:08:07][ INFO] [Original mode] Already plain: backbone.blocks.0.attn.proj.weight
+[2025-11-12 19:08:07][ INFO] [MATCHED] backbone.blocks.0.attn.proj.weight -> backbone.blocks.0.attn.proj.weight
+[2025-11-12 19:08:07][ INFO] [Original mode] Already plain: backbone.blocks.0.attn.proj.bias
+[2025-11-12 19:08:07][ INFO] [MATCHED] backbone.blocks.0.attn.proj.bias -> backbone.blocks.0.attn.proj.bias
+[2025-11-12 19:08:07][ INFO] --- Checkpoint Keys (first 5) ---
+[2025-11-12 19:08:07][ INFO]   - backbone.cls_token
+[2025-11-12 19:08:07][ INFO]   - backbone.pos_embed
+[2025-11-12 19:08:07][ INFO]   - backbone.mask_token
+[2025-11-12 19:08:07][ INFO]   - backbone.patch_embed.proj.weight
+[2025-11-12 19:08:07][ INFO]   - backbone.patch_embed.proj.bias
+[2025-11-12 19:08:07][ INFO] --- Model Keys (first 5) ---
+[2025-11-12 19:08:07][ INFO]   - depth_head.scratch.refinenet3.out_conv.weight
+[2025-11-12 19:08:07][ INFO]   - depth_head.scratch.refinenet4.out_conv.weight
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.4.mlp.fc1.bias
+[2025-11-12 19:08:07][ INFO]   - backbone.blocks.5.attn.proj.bias
+[2025-11-12 19:08:07][ INFO]   - camera_head.encoder.layers.0.norm2.weight
+[2025-11-12 19:08:07][ INFO] ---------------------------------
+[2025-11-12 19:08:07][ INFO] Successfully loaded 269 parameters.
+[2025-11-12 19:08:07][ INFO] Skipped 0 parameters (non-matching or excluded).
+[2025-11-12 19:08:07][ INFO] Initialized 0 new parameters (not found in checkpoint or skipped).
+[2025-11-12 19:08:07][ INFO] Only model weights loaded. Optimizer, scheduler, and epoch are not restored.
+[2025-11-12 19:08:07][ INFO] Seg head disabled via config; skipping seg_head validation.

@@ -522,6 +522,23 @@ def run_inference(args: argparse.Namespace) -> None:
     saved = 0
     camera_stats: Dict[str, Dict[str, float]] = {}
 
+    def _call_model(batch_images: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """
+        Run the model while handling micro-batches smaller than the DataParallel replica count.
+
+        When batch size < #GPUs, DataParallel would try to scatter an empty tensor to some replica,
+        causing it to call forward() without positional args. We fall back to single-GPU execution
+        on the first device in that case.
+        """
+        if isinstance(model, torch.nn.DataParallel):
+            num_replicas = len(model.device_ids)
+            if batch_images.size(0) < num_replicas:
+                primary_device = model.device_ids[0]
+                batch_images = batch_images.to(primary_device, non_blocking=True)
+                with torch.cuda.device(primary_device):
+                    return model.module(batch_images, task="depth")
+        return model(batch_images, task="depth")
+
     with torch.no_grad():
         progress = tqdm(total=len(loader), desc="Inference", unit="batch")
         for batch in loader:
@@ -530,7 +547,7 @@ def run_inference(args: argparse.Namespace) -> None:
             if gt_depth is not None:
                 gt_depth = gt_depth.cuda(non_blocking=True)
             with torch.cuda.amp.autocast(enabled=args.use_amp, dtype=amp_dtype):
-                outputs = model(images, task="depth")
+                outputs = _call_model(images)
                 pred_depth = outputs["depth"]
             camera_pred_norm = outputs.get("camera_intrinsics_norm")
             if camera_pred_norm is not None:

@@ -33,10 +33,8 @@ SAVE_INTERVAL=${SAVE_INTERVAL:-5}
 FROZEN_BACKBONE="ture"
 USE_MIXED_PRECISION=true  # disabled for stability.
 
-# Mode: original | lora-only | moe-only | lora-moe
+# Mode: original | lora-only | legacy-lora | endo-unid | mtlora | mtlga
 MODE="lora-only"
-NUM_EXPERTS=8
-TOP_K=2
 LORA_R=4
 LORA_ALPHA=8
 
@@ -94,11 +92,7 @@ echo "  Image Size:          ${IMG_SIZE}"
 echo "  Frozen Backbone:     ${FROZEN_BACKBONE}"
 echo "  --- PEFT Mode ---"
 echo "  Mode:                ${MODE}"
-if [[ "${MODE}" == "moe-only" || "${MODE}" == "lora-moe" ]]; then
-    echo "  Num Experts:         ${NUM_EXPERTS}"
-    echo "  Top-K:               ${TOP_K}"
-fi
-if [[ "${MODE}" == "lora-only" || "${MODE}" == "lora-moe" ]]; then
+if [[ "${MODE}" == "lora-only" || "${MODE}" == "legacy-lora" || "${MODE}" == "endo-unid" || "${MODE}" == "mtlora" || "${MODE}" == "mtlga" ]]; then
     echo "  LoRA Rank (r):       ${LORA_R}"
     echo "  LoRA Alpha:          ${LORA_ALPHA}"
 fi
@@ -194,8 +188,6 @@ fi
 TRAIN_CMD="${TRAIN_CMD} --mode ${MODE} \
 --lora-r ${LORA_R} \
 --lora-alpha ${LORA_ALPHA} \
---num-experts ${NUM_EXPERTS} \
---top-k ${TOP_K} \
 --loss-weighting-strategy ${LOSS_WEIGHTING_STRATEGY} \
 --depth-loss-weight ${DEPTH_LOSS_WEIGHT} \
 --seg-loss-weight ${SEG_LOSS_WEIGHT} \

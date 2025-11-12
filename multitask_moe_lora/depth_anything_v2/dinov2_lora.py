@@ -77,14 +77,11 @@ class DinoVisionTransformer_LoRA(nn.Module):
         interpolate_offset=0.1,
         # --- Mode Control --- #
         mode='original',
-        # --- LoRA/MoE Args (for backward compatibility) --- #
+        # --- LoRA Args (for backward compatibility) --- #
         lora_r: int = None,
         lora_alpha: int = None,
         lora_dropout: float = 0.0,
         lora_bias: str = 'none',
-        # --- MoE Args --- #
-        num_experts: int = 8,
-        top_k: int = 2,
         endo_unid_cfg: Optional[dict] = None,
         **kwargs
     ):
@@ -122,27 +119,14 @@ class DinoVisionTransformer_LoRA(nn.Module):
 
         if mode in ('endo-unid', 'mtlora', 'mtlga'):
             use_lora = True
-            use_moe = False
             lora_r = 0  # ranks handled per scope
             lora_alpha = 1
         elif mode == 'lora-only' or attention_only_lora:
             use_lora = True
-            use_moe = False
-            lora_r = lora_r if lora_r is not None else 4
-            lora_alpha = lora_alpha if lora_alpha is not None else 8
-        elif mode == 'moe-only':
-            use_lora = False
-            use_moe = True
-            lora_r = 0
-            lora_alpha = 1
-        elif mode == 'lora-moe':
-            use_lora = True
-            use_moe = True
             lora_r = lora_r if lora_r is not None else 4
             lora_alpha = lora_alpha if lora_alpha is not None else 8
         else:  # original
             use_lora = False
-            use_moe = False
             lora_r = 0
             lora_alpha = 1
 
@@ -153,7 +137,6 @@ class DinoVisionTransformer_LoRA(nn.Module):
         self.mode = mode
         self.is_endo_unid = mode in {'endo-unid', 'mtlora', 'mtlga'}
         self.use_lora = use_lora
-        self.use_moe = use_moe
         self.attention_only_lora = attention_only_lora
         self.endo_unid_cfg = endo_unid_cfg if self.is_endo_unid else None
         if self.is_endo_unid:
@@ -161,9 +144,6 @@ class DinoVisionTransformer_LoRA(nn.Module):
                 raise ValueError("EndoUniD mode requires endo_unid_cfg dictionary")
             self.adapter_controller = AdapterScopeController(default=self.endo_unid_cfg.get('default_scopes', ['shared']))
 
-        # Store MoE parameters for later use
-        self.num_experts = kwargs.get('num_experts', num_experts)
-        self.top_k = kwargs.get('top_k', top_k)
         self.num_tokens = 1
         self.n_blocks = depth
         self.num_heads = num_heads
@@ -187,59 +167,8 @@ class DinoVisionTransformer_LoRA(nn.Module):
         else:
             dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
-        # 根据use_moe标志决定FFN类型
-        if use_moe:
-            logger.info("Using MoELayer as FFN")
-            from .dinov2_layers.moe import MoELayer
-            # MoELayer需要特殊的构造参数
-            def moe_ffn(in_features, hidden_features, act_layer=act_layer, drop=0.0, bias=ffn_bias, **kwargs):
-                from .dinov2_layers.mlp_lora import Mlp_LoRA  # 导入用于专家的MLP类
-                # 获取num_experts和top_k参数（需要从kwargs中获取）
-                num_experts = kwargs.pop('num_experts', 8)
-                top_k = kwargs.pop('top_k', 2)
-
-                if use_lora:
-                    # 使用带LoRA的专家
-                    from .dinov2_layers.mlp_lora import Mlp_LoRA as ExpertClass
-                    lora_r_for_expert = lora_r
-                    lora_alpha_for_expert = lora_alpha
-                else:
-                    # 使用普通MLP专家
-                    from .dinov2_layers.mlp import Mlp as ExpertClass
-                    lora_r_for_expert = 0
-                    lora_alpha_for_expert = 1
-
-                class OneExpert(nn.Module):
-                    def __init__(self, in_features, hidden_features):
-                        super().__init__()
-                        self.expert = ExpertClass(
-                            in_features=in_features,
-                            hidden_features=hidden_features,
-                            act_layer=act_layer,
-                            drop=0.0,  # 不再在这个级别添加dropout
-                            bias=bias,
-                            lora_r=lora_r_for_expert,
-                            lora_alpha=lora_alpha_for_expert,
-                            lora_dropout=0.0
-                        )
-
-                    def forward(self, x):
-                        return self.expert(x)
-
-                return MoELayer(
-                    in_features=in_features,
-                    hidden_features=hidden_features,
-                    out_features=in_features,
-                    num_experts=num_experts,
-                    top_k=top_k,
-                    act_layer=act_layer,
-                    drop=0.0,  # dropout由各个专家处理
-                    bias=bias,
-                    lora_r=lora_r_for_expert,
-                    lora_alpha=lora_alpha_for_expert
-                )
-            _ffn_layer_class = moe_ffn
-        elif use_lora:
+        # 根据LoRA模式决定FFN类型
+        if use_lora:
             if attention_only_lora:
                 logger.info("using original MLP FFN with attention-only LoRA (legacy-lora mode)")
                 _ffn_layer_class = Mlp
@@ -298,46 +227,23 @@ class DinoVisionTransformer_LoRA(nn.Module):
                 blocks_list.append(EndoUniDBlock(**block_kwargs))
                 continue
 
-            if self.use_moe:
-                # 对于MoE模式，需要传递专家参数
-                block_kwargs = {
-                    'dim': embed_dim,
-                    'num_heads': num_heads,
-                    'mlp_ratio': mlp_ratio,
-                    'qkv_bias': qkv_bias,
-                    'proj_bias': proj_bias,
-                    'ffn_bias': ffn_bias,
-                    'drop_path': dpr[i],
-                    'norm_layer': norm_layer,
-                    'act_layer': act_layer,
-                    'ffn_layer': _ffn_layer_class,
-                    'init_values': init_values,
-                    'num_experts': self.num_experts,
-                    'top_k': self.top_k,
-                }
-                if self.use_lora: # MoE + LoRA
-                    block_kwargs['lora_r'] = lora_r
-                    block_kwargs['lora_alpha'] = lora_alpha
-                    block_kwargs['lora_dropout'] = lora_dropout
-            else:
-                # 非MoE模式
-                block_kwargs = {
-                    'dim': embed_dim,
-                    'num_heads': num_heads,
-                    'mlp_ratio': mlp_ratio,
-                    'qkv_bias': qkv_bias,
-                    'proj_bias': proj_bias,
-                    'ffn_bias': ffn_bias,
-                    'drop_path': dpr[i],
-                    'norm_layer': norm_layer,
-                    'act_layer': act_layer,
-                    'ffn_layer': _ffn_layer_class,
-                    'init_values': init_values,
-                }
-                if self.use_lora: # LoRA-only
-                    block_kwargs['lora_r'] = lora_r
-                    block_kwargs['lora_alpha'] = lora_alpha
-                    block_kwargs['lora_dropout'] = lora_dropout
+            block_kwargs = {
+                'dim': embed_dim,
+                'num_heads': num_heads,
+                'mlp_ratio': mlp_ratio,
+                'qkv_bias': qkv_bias,
+                'proj_bias': proj_bias,
+                'ffn_bias': ffn_bias,
+                'drop_path': dpr[i],
+                'norm_layer': norm_layer,
+                'act_layer': act_layer,
+                'ffn_layer': _ffn_layer_class,
+                'init_values': init_values,
+            }
+            if self.use_lora:
+                block_kwargs['lora_r'] = lora_r
+                block_kwargs['lora_alpha'] = lora_alpha
+                block_kwargs['lora_dropout'] = lora_dropout
 
             blocks_list.append(block_fn(**block_kwargs))
         if block_chunks > 0:
@@ -621,7 +527,7 @@ def vit_giant2_lora(patch_size=16, num_register_tokens=0, **kwargs):
     return model
 
 
-def DINOv2_LoRA(model_name, mode='original', lora_r=None, lora_alpha=None, lora_dropout=0.0, lora_bias='none', num_experts=8, top_k=2, **kwargs):
+def DINOv2_LoRA(model_name, mode='original', lora_r=None, lora_alpha=None, lora_dropout=0.0, lora_bias='none', **kwargs):
     model_zoo_lora = {
         "vits": vit_small_lora,
         "vitb": vit_base_lora,
@@ -648,9 +554,6 @@ def DINOv2_LoRA(model_name, mode='original', lora_r=None, lora_alpha=None, lora_
         'lora_alpha': lora_alpha,
         'lora_dropout': lora_dropout,
         'lora_bias': lora_bias,
-        # MoE args
-        'num_experts': num_experts,
-        'top_k': top_k,
     }
     config = {**base_config, **kwargs} # kwargs override base_config
 

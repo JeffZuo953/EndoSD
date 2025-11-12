@@ -198,8 +198,6 @@ class DepthAnythingV2_MultiTask(nn.Module):
                 self.backbone = DINOv2_LoRA(
                     model_name=encoder,
                     mode=mode,  # 传递mode而不是单独的flag
-                    num_experts=num_experts,
-                    top_k=top_k,
                     lora_r=lora_r,
                     lora_alpha=lora_alpha,
                     endo_unid_cfg=self.endo_unid_cfg,
