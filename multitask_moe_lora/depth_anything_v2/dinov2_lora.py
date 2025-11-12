@@ -120,7 +120,7 @@ class DinoVisionTransformer_LoRA(nn.Module):
         # 根据mode参数解码配置项
         attention_only_lora = mode == 'legacy-lora'
 
-        if mode == 'endo-unid':
+        if mode in ('endo-unid', 'mtlora', 'mtlga'):
             use_lora = True
             use_moe = False
             lora_r = 0  # ranks handled per scope
@@ -151,7 +151,7 @@ class DinoVisionTransformer_LoRA(nn.Module):
 
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.mode = mode
-        self.is_endo_unid = mode == 'endo-unid'
+        self.is_endo_unid = mode in {'endo-unid', 'mtlora', 'mtlga'}
         self.use_lora = use_lora
         self.use_moe = use_moe
         self.attention_only_lora = attention_only_lora

@@ -29,7 +29,7 @@ class TrainingConfig:
     camera_head_loss_scale: float = 1.0
 
     # 模式选择参数
-    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "endo-unid"
+    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "endo-unid", "mtlora", "gl"
 
     # LoRA 参数
     use_lora: bool = False  # 由mode参数自动设置
@@ -77,6 +77,8 @@ class TrainingConfig:
     camera_loss_weight: float = 1.0
     disable_seg_head: bool = False
     tolerate_validation_errors: bool = False
+    ga_loss_weight: float = 0.0
+    ga_loss_start_epoch: int = 0
     train_steps_per_epoch: int = 0
 
     # 数据参数
@@ -146,8 +148,8 @@ def create_parser() -> argparse.ArgumentParser:
     # 模式选择和PEFT参数
     parser.add_argument("--mode",
                         default="original",
-                        choices=["original", "lora-only", "legacy-lora", "endo-unid"],
-                        help="Training mode: original, lora-only, legacy-lora (attention-only LoRA), or endo-unid (task-split LoRA)")
+                        choices=["original", "lora-only", "legacy-lora", "endo-unid", "mtlora", "mtlga"],
+                        help="Training mode: original, lora-only, legacy-lora (attention-only LoRA), endo-unid, mtlora (shared+task LoRA), or mtlga (mtlora + Gram loss)")
 
     parser.add_argument("--lora-r", default=4, type=int, help="LoRA rank (r)")
     parser.add_argument("--lora-alpha", default=8, type=int, help="LoRA alpha")
@@ -197,6 +199,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--val-interval", default=1, type=int, help="Run validation every N epochs")
     parser.add_argument("--save-interval", default=1, type=int, help="Save checkpoint every N epochs")
     parser.add_argument("--massive-checkpoint", action="store_true", help="Save checkpoint for every single epoch")
+    parser.add_argument("--ga-loss-weight", default=0.0, type=float,
+                        help="Weight applied to Gram-alignment (GA) loss between depth/seg features")
+    parser.add_argument("--ga-loss-start-epoch", default=0, type=int,
+                        help="Epoch index after which GA loss becomes active (default: 0 for immediate)")
     
     # 损失加权设置
     parser.add_argument("--depth-loss-weight", default=1.0, type=float,
@@ -265,7 +271,7 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
 
     # 根据mode参数设置use_lora（MoE 模式已移除）
     mode = getattr(args, 'mode', 'original')
-    if mode in ('endo-unid', 'lora-only', 'legacy-lora'):
+    if mode in ('endo-unid', 'lora-only', 'legacy-lora', 'mtlora', 'mtlga'):
         use_lora = True
     else:
         use_lora = False
@@ -319,6 +325,8 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           val_interval=getattr(args, 'val_interval', 1),
                           save_interval=getattr(args, 'save_interval', 1),
                           massive_checkpoint=getattr(args, 'massive_checkpoint', False),
+                          ga_loss_weight=getattr(args, 'ga_loss_weight', 0.0),
+                          ga_loss_start_epoch=getattr(args, 'ga_loss_start_epoch', 0),
                           train_steps_per_epoch=getattr(args, 'train_steps_per_epoch', 0),
                           depth_loss_weight=getattr(args, 'depth_loss_weight', 1.0),
                           seg_loss_weight=getattr(args, 'seg_loss_weight', 1.0),

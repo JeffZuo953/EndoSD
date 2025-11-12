@@ -186,7 +186,8 @@ class HamlynDataset(Dataset):
             result["intrinsics_key"] = assets.sequence_name
 
         result["depth_path"] = depth_path
-        result["source_type"] = "hamlyn"
+        # Preserve domain label so validation buckets (LS/NO) stay aligned with config
+        result["source_type"] = getattr(self, "dataset_type", "hamlyn")
         result["dataset_name"] = "hamlyn"
 
         return result

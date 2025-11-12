@@ -21,6 +21,7 @@ from .train_utils import clear_cuda_cache, log_training_progress, autocast
 from .data_utils import summarize_loader_composition
 from .base_trainer import BaseTrainer
 from .loss_weighter import LossWeighter
+from .ga_loss import GramLoss
 
 
 class MultiTaskTrainer(BaseTrainer):
@@ -82,8 +83,18 @@ class MultiTaskTrainer(BaseTrainer):
         self._camera_grad_scale = 1.0
         if self._camera_backbone_weight > 0 and self._camera_head_weight > 0:
             self._camera_grad_scale = self._camera_head_weight / self._camera_backbone_weight
+        self._ga_loss_weight = float(getattr(self.config, 'ga_loss_weight', 0.0))
+        self._ga_loss_start_epoch = int(getattr(self.config, 'ga_loss_start_epoch', 0))
+        self._ga_loss_enabled = self._ga_loss_weight > 0.0 and self.config.mode.lower() == 'gl'
+        if self._ga_loss_enabled and getattr(self.config, "disable_seg_head", False):
+            self.logger.warning("GA loss requested but segmentation head is disabled; disabling GA loss.")
+            self._ga_loss_enabled = False
         first_param = next((p for p in self.model.parameters() if p is not None), None)
         self._primary_device = first_param.device if first_param is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._ga_loss_fn = GramLoss().to(self._primary_device) if self._ga_loss_enabled else None
+        self._ga_loss_epoch_total = 0.0
+        self._ga_loss_epoch_count = 0
+        self._latest_ga_loss: float = 0.0
         self._camera_debug_counts: Counter = Counter()
         self._camera_issue_log_limit = 5
         self._save_bad_batches = os.environ.get("FM_DEBUG_SAVE_BAD_BATCH", "0") == "1"
@@ -619,6 +630,8 @@ class MultiTaskTrainer(BaseTrainer):
         set_epoch_for_samplers(train_depth_loader, train_seg_loader, epoch)
         self.logger.info(f"===========> Epoch: {epoch}/{self.config.epochs}")
         self.model.train()
+        self._ga_loss_epoch_total = 0.0
+        self._ga_loss_epoch_count = 0
 
         depth_tracker = self._build_progress_tracker(train_depth_loader) if train_depth_loader is not None else None
         seg_tracker = self._build_progress_tracker(train_seg_loader) if train_seg_loader is not None else None
@@ -635,6 +648,10 @@ class MultiTaskTrainer(BaseTrainer):
                 avg_seg_loss = 0.0
 
         self._latest_camera_loss = avg_camera_loss
+        if self._ga_loss_epoch_count > 0:
+            self._latest_ga_loss = self._ga_loss_epoch_total / self._ga_loss_epoch_count
+        else:
+            self._latest_ga_loss = 0.0
 
         if self.rank == 0:
             if self.writer is not None:
@@ -643,6 +660,8 @@ class MultiTaskTrainer(BaseTrainer):
                     self.writer.add_scalar("train/seg_loss", avg_seg_loss, epoch)
                 if self.config.camera_head_mode.lower() != 'none':
                     self.writer.add_scalar("train/camera_loss", avg_camera_loss, epoch)
+                if self._ga_loss_enabled:
+                    self.writer.add_scalar("train/ga_loss", self._latest_ga_loss, epoch)
 
                 if getattr(self.loss_weighter, "log_vars", None) is not None:
                     bounds = getattr(self.loss_weighter, 'log_var_bounds', (-float('inf'), float('inf')))
@@ -667,11 +686,14 @@ class MultiTaskTrainer(BaseTrainer):
                     if not getattr(self.config, "disable_seg_head", False):
                         self.writer.add_scalar("train/weight_seg", weight_factor_seg, epoch)
 
-            if self.config.camera_head_mode.lower() != 'none':
+            if self.config.camera_head_mode.lower() != 'none' or self._ga_loss_enabled:
                 msg = f"Epoch {epoch} - Avg Depth Loss: {avg_depth_loss:.4f}"
                 if not getattr(self.config, "disable_seg_head", False):
                     msg += f", Avg Seg Loss: {avg_seg_loss:.4f}"
-                msg += f", Avg Camera Loss: {avg_camera_loss:.4f}"
+                if self.config.camera_head_mode.lower() != 'none':
+                    msg += f", Avg Camera Loss: {avg_camera_loss:.4f}"
+                if self._ga_loss_enabled:
+                    msg += f", Avg GA Loss: {self._latest_ga_loss:.4f}"
                 self.logger.info(msg)
             else:
                 if not getattr(self.config, "disable_seg_head", False):
@@ -696,6 +718,51 @@ class MultiTaskTrainer(BaseTrainer):
         if extra:
             msg += f", detail={extra}"
         self.logger.warning(msg)
+
+    def _prepare_ga_tokens(self, tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+        if tensor is None:
+            return None
+        if tensor.dim() == 3:
+            return tensor
+        if tensor.dim() == 4:
+            b, c, h, w = tensor.shape
+            tokens = tensor.reshape(b, c, h * w).transpose(1, 2).contiguous()
+            return tokens
+        return None
+
+    def _record_ga_loss(self, ga_value: Optional[torch.Tensor]) -> None:
+        if ga_value is None:
+            return
+        ga_float = float(ga_value.detach().item())
+        self._ga_loss_epoch_total += ga_float
+        self._ga_loss_epoch_count += 1
+
+    def _apply_ga_loss(self,
+                       outputs: Optional[Dict[str, torch.Tensor]],
+                       base_loss: torch.Tensor,
+                       epoch: int,
+                       context: str) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        if not self._ga_loss_enabled or self._ga_loss_fn is None:
+            return base_loss, None
+        if epoch < self._ga_loss_start_epoch or outputs is None:
+            return base_loss, None
+        depth_tokens = self._prepare_ga_tokens(outputs.get('ga_depth_tokens'))
+        seg_tokens = self._prepare_ga_tokens(outputs.get('ga_seg_tokens'))
+        if depth_tokens is None or seg_tokens is None:
+            return base_loss, None
+        min_tokens = min(depth_tokens.shape[1], seg_tokens.shape[1])
+        if min_tokens <= 0:
+            return base_loss, None
+        if depth_tokens.shape[1] != min_tokens:
+            depth_tokens = depth_tokens[:, :min_tokens]
+        if seg_tokens.shape[1] != min_tokens:
+            seg_tokens = seg_tokens[:, :min_tokens]
+        ga_loss = self._ga_loss_fn(depth_tokens, seg_tokens, img_level=True)
+        if not torch.isfinite(ga_loss):
+            self.logger.warning(f"GA loss produced non-finite value for context={context}; skipping term.")
+            return base_loss, None
+        self._record_ga_loss(ga_loss)
+        return base_loss + self._ga_loss_weight * ga_loss, ga_loss
 
     def _train_epoch_unified(self,
                              train_depth_loader: DataLoader,
@@ -792,7 +859,9 @@ class MultiTaskTrainer(BaseTrainer):
                 with autocast(enabled=self.config.mixed_precision, **self.autocast_kwargs):
                     img_seg = batch_seg["image"].cuda()
                     gt_seg = batch_seg["semseg_mask"].cuda().long()
-                    pred_seg = self.model(img_seg, task='seg')['seg']
+                    seg_task = 'both' if self._ga_loss_enabled else 'seg'
+                    outputs_seg = self.model(img_seg, task=seg_task, return_features=self._ga_loss_enabled)
+                    pred_seg = outputs_seg['seg']
                     pred_seg = torch.nan_to_num(pred_seg, nan=0.0).clamp_(-100.0, 100.0)
                     valid_mask = (gt_seg >= 0) & (gt_seg < self.config.num_classes)
                     if int(valid_mask.sum().item()) == 0:
@@ -800,6 +869,7 @@ class MultiTaskTrainer(BaseTrainer):
                     else:
                         gt_seg = torch.where(valid_mask, gt_seg, torch.tensor(self.ignore_index, device=gt_seg.device))
                         loss_seg = self.seg_criterion(pred_seg, gt_seg)
+                    loss_seg, _ = self._apply_ga_loss(outputs_seg, loss_seg, epoch, context='seg')
                     weighted_loss_seg = self.loss_weighter.get_loss(
                         torch.tensor(0.0, device=loss_seg.device), loss_seg, task='seg')
                     loss_seg_value = loss_seg
@@ -870,7 +940,8 @@ class MultiTaskTrainer(BaseTrainer):
             raw_gt_depth = batch_depth["depth"].cuda()
             gt_depth = torch.nan_to_num(raw_gt_depth, nan=0.0, posinf=max_depth_cfg, neginf=0.0)
             gt_depth = gt_depth.clamp_(min=min_safe_depth, max=max_depth_cfg)
-            outputs_depth = self.model(img_depth, task='depth')
+            model_task = 'both' if self._ga_loss_enabled else 'depth'
+            outputs_depth = self.model(img_depth, task=model_task, return_features=self._ga_loss_enabled)
             pred_depth = outputs_depth['depth']
             pred_depth = torch.nan_to_num(pred_depth, nan=0.0, posinf=max_depth_cfg * 1.25, neginf=0.0)
             pred_depth = pred_depth.clamp_(min=min_safe_depth, max=max_depth_cfg * 1.25)
@@ -881,6 +952,8 @@ class MultiTaskTrainer(BaseTrainer):
                 loss_depth = (pred_depth.sum() * 0.0).to(pred_depth.dtype)
             else:
                 loss_depth = self.depth_criterion(pred_depth, gt_depth, mask_depth)
+
+            loss_depth, _ = self._apply_ga_loss(outputs_depth, loss_depth, epoch, context='depth')
 
             if self.config.camera_head_mode.lower() != 'none' and 'camera_intrinsics_norm' in outputs_depth:
                 camera_pred = outputs_depth['camera_intrinsics_norm']
@@ -1104,9 +1177,12 @@ class MultiTaskTrainer(BaseTrainer):
             camera_loss_applied = False
             with autocast(enabled=self.config.mixed_precision, **self.autocast_kwargs):
                 outputs = None
+                raw_weight = self.config.depth_loss_weight if task == 'depth' else self.config.seg_loss_weight
+                safe_weight = float(raw_weight) if isinstance(raw_weight, (int, float)) and raw_weight > 0 else 1.0
                 if task == 'depth':
                     depth_gt = batch["depth"].cuda()
-                    outputs = self.model(input_img, task='depth')
+                    depth_task = 'both' if self._ga_loss_enabled else 'depth'
+                    outputs = self.model(input_img, task=depth_task, return_features=self._ga_loss_enabled)
                     depth_pred = outputs['depth']
 
                     # Sanitize depth predictions to avoid propagating NaNs/Infs into the loss.
@@ -1130,6 +1206,9 @@ class MultiTaskTrainer(BaseTrainer):
                     valid_mask = (depth_gt > 0) & (depth_gt >= self.config.min_depth) & (depth_gt <= self.config.max_depth)
                     loss = criterion(depth_pred, depth_gt, valid_mask)
 
+                    loss = loss * torch.tensor(safe_weight, device=loss.device, dtype=loss.dtype)
+                    loss, _ = self._apply_ga_loss(outputs, loss, epoch, context='depth')
+
                     if self.config.camera_head_mode.lower() != 'none' and 'camera_intrinsics_norm' in outputs:
                         camera_pred = outputs['camera_intrinsics_norm']
                         camera_batch = self._prepare_camera_targets(batch, camera_pred)
@@ -1141,7 +1220,8 @@ class MultiTaskTrainer(BaseTrainer):
                                 camera_loss_applied = True
                 else:
                     seg_gt = batch["semseg_mask"].cuda().long()
-                    outputs = self.model(input_img, task='seg')
+                    seg_task = 'both' if self._ga_loss_enabled else 'seg'
+                    outputs = self.model(input_img, task=seg_task, return_features=self._ga_loss_enabled)
                     seg_pred = outputs['seg']
                     seg_pred = torch.nan_to_num(seg_pred, nan=0.0)
                     seg_pred = seg_pred.clamp_(-100.0, 100.0)
@@ -1153,9 +1233,8 @@ class MultiTaskTrainer(BaseTrainer):
                         seg_gt = torch.where(valid_mask, seg_gt, torch.tensor(self.ignore_index, device=seg_gt.device))
                         loss = criterion(seg_pred, seg_gt)
 
-                raw_weight = self.config.depth_loss_weight if task == 'depth' else self.config.seg_loss_weight
-                safe_weight = float(raw_weight) if isinstance(raw_weight, (int, float)) and raw_weight > 0 else 1.0
-                loss = loss * torch.tensor(safe_weight, device=loss.device, dtype=loss.dtype)
+                    loss = loss * torch.tensor(safe_weight, device=loss.device, dtype=loss.dtype)
+                    loss, _ = self._apply_ga_loss(outputs, loss, epoch, context=task)
 
             if not torch.isfinite(loss).item():
                 self.logger.warning(f"Non-finite {task} loss detected at step {i}; skipping backward/optimizer step.")

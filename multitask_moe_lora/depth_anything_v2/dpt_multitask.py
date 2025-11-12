@@ -55,14 +55,18 @@ class DepthAnythingV2_MultiTask(nn.Module):
         self.mode = mode
         self.camera_head_mode = camera_head_mode.lower()
         self.endo_unid_params = endo_unid_params or {}
-        self.endo_unid_enabled = self.mode == "endo-unid"
+        scoped_modes = {"endo-unid", "mtlora", "mtlga"}
+        self.endo_unid_enabled = self.mode in scoped_modes
+        if self.mode in {"mtlora", "mtlga"} and "dinov3" in self.encoder:
+            raise ValueError(f"Mode '{self.mode}' currently supports DINOv2 backbones only.")
         if self.endo_unid_enabled and self.encoder not in {"vits", "vitb"}:
             raise ValueError("EndoUniD mode currently only supports vits or vitb encoders")
 
         # 根据mode参数解耦为内部参数
-        self.use_lora = mode in ['lora-only', 'legacy-lora', 'endo-unid']
+        self.use_lora = mode in ['lora-only', 'legacy-lora', 'endo-unid', 'mtlora', 'mtlga']
         self.use_moe = False
         self.attention_only_lora = mode == 'legacy-lora'
+        self.freeze_camera_backbone_grad = self.mode in {'mtlora', 'mtlga'}
 
         # 深度任务使用指定的layers (适配各模型的实际层数)
         self.depth_layer_idx = {
@@ -214,9 +218,10 @@ class DepthAnythingV2_MultiTask(nn.Module):
             else:
                 self.seg_head = SegFormerHead(in_channels=seg_in_channels, embedding_dim=features, num_classes=num_classes, align_corners=False)
 
-        camera_adapter_rank = self.endo_unid_params.get('camera_r', 0) if self.endo_unid_enabled else 0
-        camera_adapter_alpha = self.endo_unid_params.get('camera_alpha', 1) if self.endo_unid_enabled else 1
-        camera_adapter_dropout = self.endo_unid_params.get('dropout', 0.0) if self.endo_unid_enabled else 0.0
+        scoped_camera_enabled = self.endo_unid_enabled
+        camera_adapter_rank = self.endo_unid_params.get('camera_r', 0) if scoped_camera_enabled else 0
+        camera_adapter_alpha = self.endo_unid_params.get('camera_alpha', 1) if scoped_camera_enabled else 1
+        camera_adapter_dropout = self.endo_unid_params.get('dropout', 0.0) if scoped_camera_enabled else 0.0
 
         # Optional camera head
         if self.camera_head_mode == "simple":
@@ -270,12 +275,17 @@ class DepthAnythingV2_MultiTask(nn.Module):
             depth_features = self.backbone.get_intermediate_layers(x, n=self.depth_layer_idx[self.encoder], return_class_token=True)
             depth_features = [(patch, cls) for patch, cls in depth_features]
             results['depth_features'] = depth_features
+            if return_features and depth_features:
+                last_patch = depth_features[-1][0]
+                results['ga_depth_tokens'] = last_patch
 
         if task in ['seg', 'both'] and self.seg_head is not None:
             # 根据配置获取分割任务的特征
             self._set_adapter_scopes(['shared', 'seg'])
             seg_features = self.backbone.get_intermediate_layers(x, n=self.seg_layer_idx, return_class_token=False)
             results['seg_features'] = seg_features
+            if return_features and seg_features:
+                results['ga_seg_tokens'] = seg_features[-1]
 
         self._set_adapter_scopes(['shared'])
         return results, h, w
@@ -350,7 +360,8 @@ class DepthAnythingV2_MultiTask(nn.Module):
             if self.camera_head is not None:
                 # Use the last depth layer tokens as camera input
                 last_depth_tokens, _ = depth_features[-1]
-                camera_norm = self.camera_head(last_depth_tokens, patch_h, patch_w)
+                camera_tokens = last_depth_tokens.detach() if self.freeze_camera_backbone_grad else last_depth_tokens
+                camera_norm = self.camera_head(camera_tokens, patch_h, patch_w)
                 results['camera_intrinsics_norm'] = camera_norm
                 fx = camera_norm[:, 0] * w
                 fy = camera_norm[:, 1] * h

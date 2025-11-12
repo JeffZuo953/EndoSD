@@ -200,7 +200,8 @@ class SCardDataset(Dataset):
         result["camera_original_image_size"] = torch.tensor([float(width_px), float(height_px)], dtype=torch.float32)
         result["depth_path"] = depth_path
         result["pose_path"] = pose_path
-        result["source_type"] = "scard"
+        # Use configured domain label (LS/NO) instead of the raw dataset key
+        result["source_type"] = getattr(self, "dataset_type", "scard")
 
         return result
 
