@@ -15,7 +15,7 @@ export PYTHONPATH="$(dirname "$(pwd)"):${PYTHONPATH:-}"
 ###############################################
 NUM_GPUS=${NUM_GPUS:-1}
 CUDA_DEVICES=${CUDA_DEVICES:-"5"}
-ENCODER=${ENCODER:-"vits"}
+ENCODER=${ENCODER:-"vitb"}
 FEATURES=${FEATURES:-64}
 NUM_CLASSES=${NUM_CLASSES:-10}
 MAX_DEPTH=${MAX_DEPTH:-0.3}
@@ -123,10 +123,10 @@ fi
 # Paths / logging
 ###############################################
 BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
-PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_metric_hypersim_vits.pth"}
+PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/save/FM/fd_vitb_fd_depth_fm_v1_camera_simple_train1_20251111_131329/checkpoint_epoch_30.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
-BASE_SAVE_PATH="${BASE_DATA_PATH}/save/train_lesion"
+BASE_SAVE_PATH="${BASE_DATA_PATH}/save/train_lora"
 RUN_TAG="${DATA_PROFILE}_${ENCODER}_${MODE}_$(date +%Y%m%d_%H%M%S)"
 SAVE_PATH="${BASE_SAVE_PATH}/multitask_${RUN_TAG}"
 mkdir -p "${SAVE_PATH}"
