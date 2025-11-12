@@ -25,8 +25,8 @@ MASTER_PORT=${MASTER_PORT:-20675}
 ENCODER=${ENCODER:-"vitb"}        # {vits, vitb, vitl, dinov3_*}
 FEATURES=${FEATURES:-64}
 EPOCHS=${EPOCHS:-120}
-BATCH_SIZE=${BATCH_SIZE:-18}
-VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-64}
+BATCH_SIZE=${BATCH_SIZE:-12}
+VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-30}
 LEARNING_RATE=${LEARNING_RATE:-5e-6}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
 IMG_SIZE=${IMG_SIZE:-518}
@@ -66,14 +66,14 @@ ORIG_VAL_DATASET_INCLUDE="${VAL_DATASET_INCLUDE}"
 BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
 HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
 PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vitb.pth"}
-RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-"/data/ziyi/multitask/save/FM/fd_vitb_fd_depth_fm_v1_camera_vggtlike_train1_20251111_050042/checkpoint_latest.pth"}
+RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-"/media/gpuadmin/673eec07-52e0-4ff1-b57e-44d6dc68bc8d/jianfu/save/FM/fd_vitb_fd_depth_fm_v1_camera_vggt-like_train1_20251111_123132/checkpoint_latest.pth"}
 
 # ------------------------------------------------------------------------------
 # Output logging
 # ------------------------------------------------------------------------------
 SAVE_ROOT=${SAVE_ROOT:-"${BASE_DATA_PATH}/save/FM"}
 RUN_ID=$(date +%Y%m%d_%H%M%S)
-SAMPLE_TAG="camera_${CAMERA_HEAD_MODE}_resume_train${TRAIN_SAMPLE_STEP}"
+SAMPLE_TAG="camera_${CAMERA_HEAD_MODE}_train${TRAIN_SAMPLE_STEP}"
 SAVE_PATH="${SAVE_ROOT}/fd_${ENCODER}_${DATASET_CONFIG_NAME}_${SAMPLE_TAG}_${RUN_ID}"
 mkdir -p "${SAVE_PATH}"
 
