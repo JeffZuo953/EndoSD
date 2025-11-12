@@ -12,8 +12,8 @@ du -sh "${SRC_ROOT}"
 echo "[INFO] Creating remote directory if missing..."
 ssh "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p '${REMOTE_ROOT}'"
 
-echo "[INFO] Running rsync from ${SRC_ROOT} to ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_ROOT}"
-rsync -avh --info=progress2 --partial \
+echo "[INFO] Running incremental rsync from ${SRC_ROOT} to ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_ROOT}"
+rsync -a --partial --update --compress --info=progress2 \
     "${SRC_ROOT}/" \
     "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_ROOT}/"
 

@@ -20,8 +20,8 @@ from ..dataset.cache_utils import DepthCacheDataset, SegCacheDataset
 from ..dataset.filelist_seg_depth import FileListSegDepthDataset
 from .config import TrainingConfig
 
-BASE_DATA_PATH = os.environ.get("BASE_DATA_PATH", "/data/ziyi/multitask")
-_BASE_DATA_PREFIX = "/data/ziyi/multitask"
+_BASE_DATA_PREFIX = os.environ.get("BASE_DATA_PREFIX", "/data/ziyi/multitask")
+BASE_DATA_PATH = os.environ.get("BASE_DATA_PATH", _BASE_DATA_PREFIX)
 
 _DEFAULT_HOME_SSD = os.path.join(os.path.expanduser("~"), "ssde")
 HOME_SSD_PATH = os.environ.get("HOME_SSD_PATH", _DEFAULT_HOME_SSD)
