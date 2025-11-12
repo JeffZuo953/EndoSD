@@ -87,8 +87,8 @@ fi
 ###############################################
 # Shared knobs (override via environment vars)
 ###############################################
-NUM_GPUS=${NUM_GPUS:-2}
-CUDA_DEVICES=${CUDA_DEVICES:-"0,2"}
+NUM_GPUS=${NUM_GPUS:-1}
+CUDA_DEVICES=${CUDA_DEVICES:-"2"}
 ENCODER=${ENCODER:-"vitb"}
 FEATURES=${FEATURES:-64}
 NUM_CLASSES=${NUM_CLASSES:-10}
@@ -98,7 +98,7 @@ SEG_INPUT_TYPE=${SEG_INPUT_TYPE:-"from_depth"}
 SEG_HEAD_TYPE=${SEG_HEAD_TYPE:-"linear"}
 CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"simple"}
 
-EPOCHS=${EPOCHS:-25}
+EPOCHS=${EPOCHS:-50}
 BATCH_SIZE=${BATCH_SIZE:-9}
 SEG_BATCH_SIZE=${SEG_BATCH_SIZE:-7}
 VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-32}

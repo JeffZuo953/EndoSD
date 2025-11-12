@@ -97,6 +97,8 @@ _AUTO_IMPORT_MODULES: Dict[str, str] = {
     "kidney3d": "dataset.metadata.kidney3d",
     "endomapper": "dataset.metadata.endomapper",
     "hamlyn": "dataset.metadata.hamlyn",
+    "synthetic_polyp": "dataset.metadata.synthetic_polyp",
+    "syntheticpolyp": "dataset.metadata.synthetic_polyp",
 }
 
 

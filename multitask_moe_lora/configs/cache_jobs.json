@@ -417,6 +417,29 @@
       "batch_size": 4,
       "num_workers": 8
     },
+    "synthetic_polyp_all": {
+      "dataset": "synthetic_polyp",
+      "params": {
+        "filelist_path": "/mnt/DATA/ziyi/multitask/data/NO/SyntheticDatabase_testingset_PolypSize/filelists/all.txt",
+        "root_path": "/mnt/DATA/ziyi/multitask/data/NO/SyntheticDatabase_testingset_PolypSize",
+        "mode": "train",
+        "size": [
+          518,
+          518
+        ],
+        "max_depth": 0.25,
+        "depth_scale": 1000.0,
+        "dataset_name": "SyntheticPolyp",
+        "source_type": "NO"
+      },
+      "origin_prefix": "/mnt/DATA/ziyi/multitask/data/NO/SyntheticDatabase_testingset_PolypSize",
+      "cache_root_path": "/mnt/DATA/ziyi/multitask/data/NO/SyntheticDatabase_testingset_PolypSize/cache_pt/all",
+      "output_dir": "/mnt/DATA/ziyi/multitask/data/NO/SyntheticDatabase_testingset_PolypSize/cache_pt",
+      "filelist_name": "all_cache.txt",
+      "batch_size": 4,
+      "num_workers": 8,
+      "enable_depth_stats": false
+    },
     "kvasir_split_train": {
       "dataset": "kvasir_seg",
       "params": {

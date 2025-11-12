@@ -368,6 +368,10 @@ def _build_dataset(dataset_key: str, params: Dict[str, Any]) -> Dataset:
         from .serv_ct_dataset import ServCTDataset
         dataset = ServCTDataset(**params)
         return dataset
+    if key == "synthetic_polyp":
+        from .synthetic_polyp_dataset import SyntheticPolypDataset
+        dataset = SyntheticPolypDataset(**params)
+        return dataset
 
     raise KeyError(f"Unsupported dataset key: {dataset_key}")
 
