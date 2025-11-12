@@ -77,6 +77,7 @@ class TrainingConfig:
     camera_loss_weight: float = 1.0
     disable_seg_head: bool = False
     tolerate_validation_errors: bool = False
+    train_steps_per_epoch: int = 0
 
     # 数据参数
     img_size: int = 518
@@ -318,6 +319,7 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           val_interval=getattr(args, 'val_interval', 1),
                           save_interval=getattr(args, 'save_interval', 1),
                           massive_checkpoint=getattr(args, 'massive_checkpoint', False),
+                          train_steps_per_epoch=getattr(args, 'train_steps_per_epoch', 0),
                           depth_loss_weight=getattr(args, 'depth_loss_weight', 1.0),
                           seg_loss_weight=getattr(args, 'seg_loss_weight', 1.0),
                           camera_loss_weight=getattr(args, 'camera_loss_weight', 1.0),
@@ -385,6 +387,8 @@ def validate_config(config: TrainingConfig) -> List[str]:
         errors.append("val_min_samples_per_dataset must be >= 0")
     if not math.isfinite(config.clip_grad_norm):
         errors.append("clip_grad_norm must be a finite float")
+    if config.train_steps_per_epoch < 0:
+        errors.append("train_steps_per_epoch must be >= 0")
     scheduler_name = (config.lr_scheduler or "cosine").lower()
     if scheduler_name not in {"cosine", "poly"}:
         errors.append("lr_scheduler must be either 'cosine' or 'poly'")
@@ -414,7 +418,7 @@ def validate_config(config: TrainingConfig) -> List[str]:
     if config.seg_input_type == "from_depth" and config.frozen_backbone:
         errors.append("from_depth seg_input_type may not work well with frozen_backbone")
 
-    valid_camera_modes = {"none", "simple", "vggtlike", "vggt-like"}
+    valid_camera_modes = {"none", "simple", "prolike", "vggtlike", "vggt-like"}
     if config.camera_head_mode.lower() not in valid_camera_modes:
         errors.append(f"camera_head_mode must be one of {sorted(valid_camera_modes)}")
     if config.camera_loss_type.lower() not in {"l1", "l2"}:

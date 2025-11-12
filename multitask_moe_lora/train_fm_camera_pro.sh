@@ -60,7 +60,7 @@ MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET}
 
 
 TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
-VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoSynth,EndoVis2017"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoVis2017"}
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration

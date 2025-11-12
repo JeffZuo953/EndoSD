@@ -1,13 +1,13 @@
 #!/bin/bash
 # ==============================================================================
-# Foundation Depth Camera Training (Simple head)
+# Foundation Depth Camera Training (Simple head, sampled)
 # ==============================================================================
 set -euo pipefail
 
 export PYTHONDONTWRITEBYTECODE=1
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-4}
 export NCCL_DEBUG=${NCCL_DEBUG:-INFO}
-export TORCH_DISTRIBUTED_DEBUG=${TORCH_DISTRIBUTED_DEBUG:-INFO}
+export TORCH_DISTRIBUTED_DEBUG=${TORCH_DISTRIBUTED_DEBUG:-DETAIL}
 PARENT_DIR="$(dirname "$(pwd)")"
 export PYTHONPATH="$(pwd):${PARENT_DIR}:${PYTHONPATH:-}"
 export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
@@ -16,17 +16,17 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
 NUM_GPUS=${NUM_GPUS:-3}
-CUDA_DEVICES=${CUDA_DEVICES:-"3,4,5"}
-MASTER_PORT=${MASTER_PORT:-20765}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,1,2"}
+MASTER_PORT=${MASTER_PORT:-20775}
 
 # ------------------------------------------------------------------------------
 # Core training hyper-parameters
 # ------------------------------------------------------------------------------
-ENCODER=${ENCODER:-"vitb"}        # {vits, vitb, vitl, dinov3_*}
+ENCODER=${ENCODER:-"vits"}        # {vits, vitb, vitl, dinov3_*}
 FEATURES=${FEATURES:-64}
 EPOCHS=${EPOCHS:-120}
-BATCH_SIZE=${BATCH_SIZE:-18}
-VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-24}
+BATCH_SIZE=${BATCH_SIZE:-36}
+VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-64}
 LEARNING_RATE=${LEARNING_RATE:-5e-6}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
 IMG_SIZE=${IMG_SIZE:-518}
@@ -35,22 +35,19 @@ MIN_DEPTH=${MIN_DEPTH:-1e-6}
 MIXED_PRECISION=${MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"simple"}
-CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.3}
+CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.2}
 CAMERA_LOSS_TYPE=${CAMERA_LOSS_TYPE:-"l2"}   # l1 | l2
-CAMERA_LR=${CAMERA_LR:-5e-4}
+CAMERA_LR=${CAMERA_LR:-1e-5}
 LR_SCHEDULER=${LR_SCHEDULER:-"poly"}
 
 FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
-TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
-VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-1}
-VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-100}
+TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-300}
+VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:--1}
+VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-20}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
-
 
 # ------------------------------------------------------------------------------
 # Dataset configuration
-# NOTE: define `fd_depth_fm_v1` in util/data_utils.DATASET_PATHS to point to
-#       the exact caches/filelists for the datasets enumerated below.
 # ------------------------------------------------------------------------------
 DATASET_CONFIG_NAME=${DATASET_CONFIG_NAME:-"fd_depth_fm_v1"}
 DATASET_MODALITY=${DATASET_MODALITY:-"fd"}
@@ -58,6 +55,7 @@ PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 
 TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
 VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoVis2017"}
+
 ORIG_TRAIN_DATASET_INCLUDE="${TRAIN_DATASET_INCLUDE}"
 ORIG_VAL_DATASET_INCLUDE="${VAL_DATASET_INCLUDE}"
 
@@ -66,7 +64,7 @@ ORIG_VAL_DATASET_INCLUDE="${VAL_DATASET_INCLUDE}"
 # ------------------------------------------------------------------------------
 BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
 HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
-PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vitb.pth"}
+PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vits.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
 # ------------------------------------------------------------------------------
@@ -81,7 +79,7 @@ mkdir -p "${SAVE_PATH}"
 exec > >(tee -a "${SAVE_PATH}/train.log") 2>&1
 
 echo "=============================================================================="
-echo "FD Depth Training (Legacy, No-LoRA)"
+echo "FD Depth Training (Sampled, Simple Head)"
 echo "------------------------------------------------------------------------------"
 echo "  Encoder:               ${ENCODER}"
 echo "  Features:              ${FEATURES}"
@@ -111,7 +109,6 @@ if [[ -n "${MAX_SAMPLES_PER_DATASET}" ]]; then
 else
     echo "  Max samples / dataset: all"
 fi
-echo "  Sample mode:           ${FM_SAMPLE_MODE} (size=${MAX_SAMPLES_PER_DATASET})"
 echo "  Train sample step:     ${TRAIN_SAMPLE_STEP}"
 echo "  Val min samples:       ${VAL_MIN_SAMPLES_PER_DATASET}"
 echo "  Save path:             ${SAVE_PATH}"
@@ -164,9 +161,6 @@ BASE_CMD=(
     --lr-camera "${CAMERA_LR}"
     --lr-scheduler "${LR_SCHEDULER}"
 )
-if [[ -n "${MAX_SAMPLES_PER_DATASET}" ]]; then
-    BASE_CMD+=(--max-samples-per-dataset "${MAX_SAMPLES_PER_DATASET}")
-fi
 
 if [[ -n "${TRAIN_DATASET_INCLUDE}" ]]; then
     BASE_CMD+=(--train-dataset-include "${TRAIN_DATASET_INCLUDE}")
@@ -191,7 +185,7 @@ echo "[INFO] Launch command:"
 printf ' %q' "${BASE_CMD[@]}"
 echo ""
 
-# Optional backup of current repo snapshot
 rsync -a --exclude='.git' --exclude='tmp_runs' ./ "${SAVE_PATH}/code_snapshot" >/dev/null 2>&1 || true
 
 "${BASE_CMD[@]}"
+

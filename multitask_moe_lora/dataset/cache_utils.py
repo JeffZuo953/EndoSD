@@ -32,6 +32,34 @@ _FORCE_DEPTH_POSITIVE_MASK_TOKENS = (
 )
 
 
+def _expand_path(value: str) -> str:
+    return os.path.abspath(os.path.expanduser(os.path.expandvars(value)))
+
+
+_PREFIX_ENV_MAP = (
+    ("/data/ziyi/multitask", "BASE_DATA_PATH"),
+    ("/home/ziyi/ssde", "HOME_SSD_PATH"),
+    ("/media/ssd2t/jianfu", "SSD2T_DATA_PATH"),
+    ("/media/ExtHDD1/jianfu", "EXT_HDD_DATA_PATH"),
+)
+
+
+def _rewrite_cache_path(path: str) -> str:
+    if not isinstance(path, str):
+        return path
+    normalized = _expand_path(path)
+    for prefix, env_key in _PREFIX_ENV_MAP:
+        if normalized.startswith(prefix):
+            replacement = os.environ.get(env_key)
+            if not replacement:
+                continue
+            replacement = _expand_path(replacement)
+            suffix = normalized[len(prefix):].lstrip("/\\")
+            normalized = os.path.join(replacement, suffix)
+            break
+    return normalized
+
+
 def _resolve_progress_step(default: int = 3000) -> int:
     env_value = os.environ.get("DATASET_PROGRESS_STEP", "").strip()
     if env_value:
@@ -169,6 +197,8 @@ class DepthCacheDataset(Dataset):
             dataset_type (str): 数据集的类型 ('kidney' or 'colon')，用于在验证时区分来源。
             path_transform (Callable[[str], str], optional): 一个函数，用于转换文件列表中的每个路径。默认为 None。
         """
+        filelist_path = _rewrite_cache_path(filelist_path)
+        filelist_path = _rewrite_cache_path(filelist_path)
         self.original_filelist_path = filelist_path
         self.dataset_type = dataset_type
         self.dataset_name = dataset_name or _infer_dataset_name_from_path(filelist_path)
@@ -187,7 +217,7 @@ class DepthCacheDataset(Dataset):
             raise FileNotFoundError(f"缓存文件列表不存在: {candidate_filelist}")
 
         with open(candidate_filelist, "r") as f:
-            raw_paths = [line.strip() for line in f if line.strip()]
+            raw_paths = [_rewrite_cache_path(line.strip()) for line in f if line.strip()]
 
         if path_transform:
             raw_paths = [path_transform(path) for path in raw_paths]
@@ -507,7 +537,7 @@ class SegCacheDataset(Dataset):
             raise FileNotFoundError(f"缓存文件列表不存在: {candidate_filelist}")
 
         with open(candidate_filelist, "r") as f:
-            raw_paths = [line.strip() for line in f if line.strip()]
+            raw_paths = [_rewrite_cache_path(line.strip()) for line in f if line.strip()]
 
         if path_transform:
             raw_paths = [path_transform(path) for path in raw_paths]

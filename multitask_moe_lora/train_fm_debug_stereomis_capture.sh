@@ -55,8 +55,8 @@ DATASET_CONFIG_NAME=${DATASET_CONFIG_NAME:-"fd_depth_fm_v1"}
 DATASET_MODALITY=${DATASET_MODALITY:-"fd"}
 PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 
-TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"StereoMIS"}
-VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"EndoVis2017"}
+TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
+VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoVis2017"}
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
