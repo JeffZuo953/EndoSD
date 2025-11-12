@@ -1,6 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
+usage() {
+    cat <<'EOF'
+Usage: bash train_lora [DATA_PROFILE] [--debug] [--profile NAME]
+
+DATA_PROFILE can be ENDO / EndoSynth / NO / LS (case-insensitive).
+--debug        : enable debug mode (also honored via DEBUG=1/true), switches save path to .../train_lora_debug.
+--profile NAME : same as providing DATA_PROFILE positionally.
+EOF
+}
+
+pick_master_port() {
+    python - <<'PY'
+import socket
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind(("", 0))
+    print(s.getsockname()[1])
+PY
+}
+
 # =============================================
 # Generic Multi-Mode LoRA training launcher
 # Supports NO / LS / EndoSynth datasets + 6 PEFT modes
@@ -9,6 +28,61 @@ set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 export OMP_NUM_THREADS=1
 export PYTHONPATH="$(dirname "$(pwd)"):${PYTHONPATH:-}"
+
+###############################################
+# CLI parsing
+###############################################
+DEBUG_MODE=false
+DATA_PROFILE_CLI=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --debug)
+            DEBUG_MODE=true
+            shift
+            ;;
+        --profile)
+            if [[ $# -lt 2 ]]; then
+                echo "--profile expects an argument" >&2
+                usage
+                exit 1
+            fi
+            DATA_PROFILE_CLI="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        ENDO|endo|Endo|EndoSynth|endosynth)
+            DATA_PROFILE_CLI="ENDO"
+            shift
+            ;;
+        NO|no)
+            DATA_PROFILE_CLI="NO"
+            shift
+            ;;
+        LS|ls)
+            DATA_PROFILE_CLI="LS"
+            shift
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ "${DEBUG_MODE}" != "true" ]]; then
+    case "${DEBUG:-}" in
+        1|true|TRUE|True|yes|YES)
+            DEBUG_MODE=true
+            ;;
+        *)
+            DEBUG_MODE=false
+            ;;
+    esac
+fi
 
 ###############################################
 # Shared knobs (override via environment vars)
@@ -37,7 +111,11 @@ FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 MODE=${MODE:-"legacy-lora"}
 
 # Dataset profile: ENDO (EndoSynth-only), NO (multi-domain no_bundle), LS (ls_bundle)
-DATA_PROFILE=${DATA_PROFILE:-"ENDO"}
+DATA_PROFILE=${DATA_PROFILE_CLI:-${DATA_PROFILE:-"ENDO"}}
+DATA_PROFILE=$(echo "${DATA_PROFILE}" | tr '[:lower:]' '[:upper:]')
+if [[ "${DATA_PROFILE}" == "ENDOSYNTH" ]]; then
+    DATA_PROFILE="ENDO"
+fi
 
 ###############################################
 # Dataset-specific switches
@@ -132,7 +210,12 @@ BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
 PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/save/FM/fd_vitb_fd_depth_fm_v1_camera_simple_train1_20251111_131329/checkpoint_epoch_30.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
-BASE_SAVE_PATH="${BASE_DATA_PATH}/save/train_lora"
+DEBUG_SUFFIX=""
+if [[ "${DEBUG_MODE}" == "true" ]]; then
+    DEBUG_SUFFIX="_debug"
+fi
+
+BASE_SAVE_PATH="${BASE_DATA_PATH}/save/train_lora${DEBUG_SUFFIX}"
 RUN_TAG="${DATA_PROFILE}_${ENCODER}_${MODE}_$(date +%Y%m%d_%H%M%S)"
 SAVE_PATH="${BASE_SAVE_PATH}/multitask_${RUN_TAG}"
 mkdir -p "${SAVE_PATH}"
@@ -160,7 +243,13 @@ fi
 export CUDA_VISIBLE_DEVICES=${CUDA_DEVICES}
 export WORLD_SIZE=${NUM_GPUS}
 export MASTER_ADDR=localhost
-export MASTER_PORT=${MASTER_PORT:-20700}
+if [[ -z "${MASTER_PORT:-}" ]]; then
+    MASTER_PORT=$(pick_master_port 2>/dev/null || true)
+fi
+if [[ -z "${MASTER_PORT}" ]]; then
+    MASTER_PORT=20700
+fi
+export MASTER_PORT
 
 ###############################################
 # Build command
