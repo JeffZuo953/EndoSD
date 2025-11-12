@@ -79,7 +79,8 @@ for rel in "${DATASETS[@]}"; do
     DEST_PATH="${REMOTE_ROOT}/${rel}"
     echo "[SYNC] ${SRC_PATH} -> ${REMOTE_USER}@${REMOTE_HOST}:${DEST_PATH}"
     ssh_with_opts "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p '$(dirname "${DEST_PATH}")'"
-    rsync_with_opts -a --partial --update --compress --info=progress2 \
+    # -L ensures we copy the contents of cache_pt (and other symlinked dirs) instead of the link itself
+    rsync_with_opts -aL --partial --update --compress --info=progress2 \
         "${SRC_PATH}/" \
         "${REMOTE_USER}@${REMOTE_HOST}:${DEST_PATH}/"
 done
