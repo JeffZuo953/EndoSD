@@ -35,7 +35,7 @@ TOP_K=2
 LORA_R=4
 LORA_ALPHA=8
 
-DATASET_CONFIG_NAME="no_ls_local"
+DATASET_CONFIG_NAME="no_bundle"
 PATH_TRANSFORM_NAME="none"
 DATASET_MODALITY="mt"  # mt (multi-task) or fd (depth-focused) for NO bundle
 MAX_SAMPLES_PER_DATASET=""

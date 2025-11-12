@@ -814,12 +814,51 @@ def create_datasets(config: TrainingConfig) -> tuple:
             "seg_val_cvc_endoscene": "/data/ziyi/multitask/data/ValidationDataset/media/ssd2t/jianfu/data/polyp/CVC-EndoScene/ValidationDataset/cache/train_cache.txt",
             "seg_val_etis": "/data/ziyi/multitask/data/ETIS-LaribPolypDB/media/ssd2t/jianfu/data/polyp/ETIS-LaribPolypDB/cache/train_cache.txt",
         },
-        'no_ls_v1': {
+        'no_bundle': {
             "depth_train_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/NO/endomapper_sim/cache/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth[val]",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
                     "dataset_type": "NO",
-                    "transform_key": "depth_train_endomapper",
+                    "name": "Kidney3D",
+                },
+            ],
+            "depth_val_caches": [
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoNeRF[train]",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoNeRF",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
+                    "dataset_type": "NO",
+                    "name": "Kidney3D",
+                },
+            ],
+            "seg_train_caches": [
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth[val]",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
@@ -827,69 +866,10 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "Kidney3D",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "StereoMIS",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-            "depth_val_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/NO/endomapper_sim/cache/val_cache.txt",
+                    "path": "/data/ziyi/multitask/data/NO/RIRS-SegC/train_split_cache.txt",
                     "dataset_type": "NO",
-                    "transform_key": "depth_val_endomapper",
+                    "name": "RIRS-SegC",
                 },
-                {
-                    "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
-                    "dataset_type": "NO",
-                    "name": "Kidney3D",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "StereoMIS",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-            "seg_train_caches": [
                 {
                     "path": "/data/ziyi/multitask/data/NO/RIRS-SegP/train_cache.txt",
                     "dataset_type": "NO",
@@ -916,41 +896,21 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "Kvasir-SEG",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/NO/ETIS-LaribPolypDB/train_cache.txt",
                     "dataset_type": "NO",
-                    "name": "Kidney3D",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
+                    "name": "ETIS-LaribPolypDB",
                 },
             ],
             "seg_val_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/NO/CVC-EndoScene/ValidationDataset/cache/train_cache.txt",
-                    "dataset_type": "NO",
-                    "transform_key": "seg_val_cvc_endoscene",
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoNeRF[train]",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/NO/kvasir-SEG-split/cache_pt/val_cache.txt",
-                    "dataset_type": "NO",
-                    "name": "Kvasir-SEG",
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoNeRF",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
@@ -958,194 +918,20 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "Kidney3D",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-        },
-        'no_ls_local': {
-            "depth_train_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/NO/endomapper_sim/cache/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/NO/RIRS-SegC/val_split_cache.txt",
                     "dataset_type": "NO",
-                    "transform_key": "depth_train_endomapper",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
-                    "dataset_type": "NO",
-                    "name": "Kidney3D",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "StereoMIS",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/all_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-            "depth_val_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/NO/endomapper_sim/cache/val_cache.txt",
-                    "dataset_type": "NO",
-                    "transform_key": "depth_val_endomapper",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
-                    "dataset_type": "NO",
-                    "name": "Kidney3D",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "StereoMIS",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-            "seg_train_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/NO/RIRS-SegP/train_cache.txt",
-                    "dataset_type": "NO",
-                    "transform_key": "seg_train_rirs",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/NO/bkai-igh-neopolyp/cache/train_cache.txt",
-                    "dataset_type": "NO",
-                    "transform_key": "seg_train_bkai",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/NO/clinicDB/cache/train_cache.txt",
-                    "dataset_type": "NO",
-                    "transform_key": "seg_train_clinicdb",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/NO/CVC-EndoScene/TrainDataset/cache/train_cache.txt",
-                    "dataset_type": "NO",
-                    "transform_key": "seg_train_cvc_endoscene",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/NO/kvasir-SEG-split/cache_pt/train_cache.txt",
-                    "dataset_type": "NO",
-                    "name": "Kvasir-SEG",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
-                    "dataset_type": "NO",
-                    "name": "Kidney3D",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/all_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-            "seg_val_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/NO/RIRS-SegP/val_cache.txt",
-                    "dataset_type": "NO",
-                    "transform_key": "seg_val_rirs",
+                    "name": "RIRS-SegC",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/NO/CVC-EndoScene/ValidationDataset/cache/train_cache.txt",
                     "dataset_type": "NO",
                     "transform_key": "seg_val_cvc_endoscene",
+                    "name": "CVC-EndoScene",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/NO/kvasir-SEG-split/cache_pt/val_cache.txt",
                     "dataset_type": "NO",
                     "name": "Kvasir-SEG",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
-                    "dataset_type": "NO",
-                    "name": "Kidney3D",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
                 },
             ],
         },
@@ -1270,105 +1056,41 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 },
             ],
         },
-        'ls_only_v1': {
+        'ls_bundle': {
             "depth_train_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
                     "dataset_type": "LS",
+                    "name": "EndoVis2018",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
                     "dataset_type": "LS",
+                    "name": "EndoVis2018[val]",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/SCARED/cache/train_cache.txt",
-                    "dataset_type": "LS",
-                },
             ],
             "depth_val_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/SCARED/cache/test_cache.txt",
-                    "dataset_type": "LS",
-                },
                 {
                     "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
             ],
-            "depth_train_filelists": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/filelists/train.txt",
-                    "dataset_type": "LS",
-                    "max_depth": 0.3,
-                    "depth_scale": 1.0,
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/filelists/train.txt",
-                    "dataset_type": "LS",
-                    "max_depth": 0.3,
-                    "depth_scale": 255.0 / 0.3,
-                },
-            ],
-            "depth_val_filelists": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/filelists/val.txt",
-                    "dataset_type": "LS",
-                    "max_depth": 0.3,
-                    "depth_scale": 1.0,
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/filelists/val.txt",
-                    "dataset_type": "LS",
-                    "max_depth": 0.3,
-                    "depth_scale": 255.0 / 0.3,
-                },
-            ],
-            "seg_train_filelists": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/filelists/train.txt",
-                    "dataset_type": "LS",
-                    "max_depth": 0.3,
-                    "depth_scale": 1.0,
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/filelists/train.txt",
-                    "dataset_type": "LS",
-                    "max_depth": 0.3,
-                    "depth_scale": 255.0 / 0.3,
-                },
-            ],
-            "seg_val_filelists": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/filelists/val.txt",
-                    "dataset_type": "LS",
-                    "max_depth": 0.3,
-                    "depth_scale": 1.0,
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/filelists/val.txt",
-                    "dataset_type": "LS",
-                    "max_depth": 0.3,
-                    "depth_scale": 255.0 / 0.3,
-                },
-            ],
             "seg_train_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
                     "dataset_type": "LS",
+                    "name": "EndoVis2018",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoVis2018[val]",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
@@ -1377,10 +1099,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 },
             ],
             "seg_val_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                },
                 {
                     "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
@@ -1488,18 +1206,44 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 }
             ],
         },
-        'ls_only_v1_filelist': {
-            "depth_train_filelists": [
-                {"path": "/data/ziyi/multitask/data/LS/EndoVis2018/filelists/train.txt", "dataset_type": "LS", "max_depth": 0.3, "depth_scale": 1.0, "name": "EndoVis2018"},
+        'endosynth_only': {
+            "depth_train_caches": [
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth[val]",
+                },
             ],
-            "depth_val_filelists": [
-                {"path": "/data/ziyi/multitask/data/LS/EndoVis2018/filelists/val.txt", "dataset_type": "LS", "max_depth": 0.3, "depth_scale": 1.0, "name": "EndoVis2018"},
+            "depth_val_caches": [
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth[val]",
+                },
             ],
-            "seg_train_filelists": [
-                {"path": "/data/ziyi/multitask/data/LS/EndoVis2018/filelists/train.txt", "dataset_type": "LS", "max_depth": 0.3, "depth_scale": 1.0, "name": "EndoVis2018"},
+            "seg_train_caches": [
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth[val]",
+                },
             ],
-            "seg_val_filelists": [
-                {"path": "/data/ziyi/multitask/data/LS/EndoVis2018/filelists/val.txt", "dataset_type": "LS", "max_depth": 0.3, "depth_scale": 1.0, "name": "EndoVis2018"},
+            "seg_val_caches": [
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth[val]",
+                },
             ],
         },
     }

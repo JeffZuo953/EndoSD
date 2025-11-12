@@ -9,8 +9,8 @@ export PYTHONPATH="$(dirname "$(pwd)"):${PYTHONPATH:-}"
 # Multi-Task Training (Depth + Segmentation) — DINOv2 Legacy LoRA (LS dataset bundle)
 # ==============================================================================
 
-NUM_GPUS=3
-CUDA_DEVICES="3,4,5"
+NUM_GPUS=1
+CUDA_DEVICES="5"
 ENCODER="vits"
 FEATURES=64
 NUM_CLASSES=10
@@ -35,7 +35,7 @@ TOP_K=2
 LORA_R=4
 LORA_ALPHA=8
 
-DATASET_CONFIG_NAME="ls_only_v1"
+DATASET_CONFIG_NAME="ls_bundle"
 PATH_TRANSFORM_NAME="none"
 DATASET_MODALITY="mt"  # mt (multi-task) or fd (depth-focused) for LS bundle
 MAX_SAMPLES_PER_DATASET=""

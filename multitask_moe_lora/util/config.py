@@ -210,7 +210,7 @@ def create_parser() -> argparse.ArgumentParser:
     # 数据参数
     parser.add_argument("--img-size", default=518, type=int)
     parser.add_argument("--dataset-config-name", type=str, default="server_hk_01",
-                        choices=['server_sz', 'server_hk_01', 'no_ls_v1', 'no_ls_local', 'no_only_v1', 'ls_only_v1', 'ls_only_v1_filelist', 'fd_depth_fm_v1'],
+                        choices=['server_sz', 'server_hk_01', 'no_bundle', 'ls_bundle', 'endosynth_only', 'no_only_v1', 'fd_depth_fm_v1'],
                         help="Name of the dataset configuration to use (e.g., 'server_sz', 'server_hk_01')")
     parser.add_argument("--path-transform-name", type=str, default="sz_to_hk",
                         choices=['sz_to_hk', 'no_ls_default', 'no_only_default', 'ls_default', 'none'],
