@@ -15,9 +15,9 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=${NUM_GPUS:-3}
-CUDA_DEVICES=${CUDA_DEVICES:-"0,1,2"}
-MASTER_PORT=${MASTER_PORT:-20675}
+NUM_GPUS=${NUM_GPUS:-1}
+CUDA_DEVICES=${CUDA_DEVICES:-"0"}
+MASTER_PORT=${MASTER_PORT:-20475}
 
 # ------------------------------------------------------------------------------
 # Core training hyper-parameters
