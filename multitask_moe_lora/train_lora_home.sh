@@ -96,6 +96,7 @@ MAX_DEPTH=${MAX_DEPTH:-0.3}
 # Use depth feature taps for segmentation to ensure identical layers
 SEG_INPUT_TYPE=${SEG_INPUT_TYPE:-"from_depth"}
 SEG_HEAD_TYPE=${SEG_HEAD_TYPE:-"linear"}
+CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"simple"}
 
 EPOCHS=${EPOCHS:-50}
 BATCH_SIZE=${BATCH_SIZE:-12}
@@ -207,7 +208,7 @@ fi
 # Paths / logging
 ###############################################
 BASE_DATA_PATH=${BASE_DATA_PATH:-"/mnt/DATA/ziyi/multitask"}
-PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/save/FM/fd_vitb_fd_depth_fm_v1_camera_simple_train1_20251111_131329/checkpoint_epoch_30.pth"}
+PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"/home/ziyi/checkpoint_38.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
 DEBUG_SUFFIX=""
@@ -272,6 +273,7 @@ TRAIN_CMD=(
     --lr "${LEARNING_RATE}"
     --weight-decay "${WEIGHT_DECAY}"
     --img-size "${IMG_SIZE}"
+    --camera-head-mode "${CAMERA_HEAD_MODE}"
     --mode "${MODE}"
     --dataset-config-name "${DATASET_CONFIG_NAME}"
     --path-transform-name "${PATH_TRANSFORM_NAME}"
