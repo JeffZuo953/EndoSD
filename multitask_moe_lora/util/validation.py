@@ -204,9 +204,8 @@ class SegValidator:
         self.pred_folder = None
 
     def setup_output_folder(self, save_path: str) -> None:
-        """设置输出文件夹"""
-        self.pred_folder = os.path.join(save_path, 'pred_seg')
-        os.makedirs(self.pred_folder, exist_ok=True)
+        """禁用分割图像保存（仅保持接口一致）。"""
+        self.pred_folder = None
 
     def reset_metrics(self) -> None:
         """重置指标"""
@@ -250,9 +249,8 @@ class SegValidator:
         return loss.item()
 
     def save_prediction(self, pred: torch.Tensor, epoch: int) -> None:
-        """保存预测结果"""
-        if self.pred_folder is not None:
-            save_seg_prediction(pred, f'epoch_{epoch}.png', self.pred_folder)
+        """训练期间不再保存分割预测，保持空实现。"""
+        return
 
     def get_metrics(self) -> Dict[str, float]:
         """获取指标"""
@@ -760,9 +758,10 @@ def validate_and_visualize(model: torch.nn.Module,
         temp_validator = SegValidator(config)
         tb_seg_samples = {} if rank == 0 else None
 
-    save_visuals = rank == 0 and epoch >= 0 and ((epoch + 1) % 20 == 0)
-    depth_visual_samples: Optional[Dict[str, Dict[str, Any]]] = {} if save_visuals and task_type == 'depth' else None
-    seg_visual_samples: Optional[Dict[str, Dict[str, Any]]] = {} if save_visuals and task_type == 'seg' else None
+    # 禁止训练过程写入可视化图片，避免产生 pred_depth/pred_seg 等目录
+    save_visuals = False
+    depth_visual_samples: Optional[Dict[str, Dict[str, Any]]] = None
+    seg_visual_samples: Optional[Dict[str, Dict[str, Any]]] = None
 
     if rank == 0 and temp_validator is not None:
         temp_validator.setup_output_folder(config.save_path)
