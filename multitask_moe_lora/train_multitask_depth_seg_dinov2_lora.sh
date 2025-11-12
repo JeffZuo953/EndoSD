@@ -199,7 +199,8 @@ TRAIN_CMD="${TRAIN_CMD} --mode ${MODE} \
 --seg-loss-weight ${SEG_LOSS_WEIGHT} \
 --dwa-temperature ${DWA_TEMPERATURE} \
 --dataset-config-name ${DATASET_CONFIG_NAME} \
---path-transform-name ${PATH_TRANSFORM_NAME}"
+--path-transform-name ${PATH_TRANSFORM_NAME} \
+--checkpoint-policy latest-only"
 
 echo "Starting multi-task training..."
 echo "Training command: ${TRAIN_CMD}"

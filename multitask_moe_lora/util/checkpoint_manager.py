@@ -100,6 +100,9 @@ class CheckpointManager:
         # 1. 保存最新的检查点
         self.save(epoch, "latest")
 
+        if getattr(self.config, "checkpoint_policy", "full") == "latest-only":
+            return
+
         epoch_one_based = epoch + 1
 
         save_epoch_snapshot = (

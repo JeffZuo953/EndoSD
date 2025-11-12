@@ -182,6 +182,7 @@ TRAIN_CMD=(
     --path-transform-name "${PATH_TRANSFORM_NAME}"
     --dataset-modality "${DATASET_MODALITY}"
     --save-path "${SAVE_PATH}"
+    --checkpoint-policy "latest-only"
 )
 
 if [[ -n "${TRAIN_DATASET_INCLUDE}" ]]; then

@@ -70,6 +70,7 @@ class TrainingConfig:
     val_interval: int = 1
     save_interval: int = 1
     massive_checkpoint: bool = False
+    checkpoint_policy: str = "full"
     
     # 损失加权
     depth_loss_weight: float = 1.0
@@ -199,6 +200,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--val-interval", default=1, type=int, help="Run validation every N epochs")
     parser.add_argument("--save-interval", default=1, type=int, help="Save checkpoint every N epochs")
     parser.add_argument("--massive-checkpoint", action="store_true", help="Save checkpoint for every single epoch")
+    parser.add_argument("--checkpoint-policy",
+                        default="full",
+                        choices=["full", "latest-only"],
+                        help="Checkpoint saving policy: 'full' keeps milestone/best snapshots; 'latest-only' saves just checkpoint_latest.pth")
     parser.add_argument("--ga-loss-weight", default=0.0, type=float,
                         help="Weight applied to Gram-alignment (GA) loss between depth/seg features")
     parser.add_argument("--ga-loss-start-epoch", default=0, type=int,
@@ -325,6 +330,7 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           val_interval=getattr(args, 'val_interval', 1),
                           save_interval=getattr(args, 'save_interval', 1),
                           massive_checkpoint=getattr(args, 'massive_checkpoint', False),
+                          checkpoint_policy=getattr(args, 'checkpoint_policy', 'full'),
                           ga_loss_weight=getattr(args, 'ga_loss_weight', 0.0),
                           ga_loss_start_epoch=getattr(args, 'ga_loss_start_epoch', 0),
                           train_steps_per_epoch=getattr(args, 'train_steps_per_epoch', 0),
