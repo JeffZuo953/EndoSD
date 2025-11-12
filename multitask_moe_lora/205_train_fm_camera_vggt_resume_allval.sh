@@ -63,15 +63,19 @@ ORIG_VAL_DATASET_INCLUDE="${VAL_DATASET_INCLUDE}"
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
 # ------------------------------------------------------------------------------
-BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
-HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
+
+PROJECT_ROOT=${PROJECT_ROOT:-"/media/gpuadmin/673eec07-52e0-4ff1-b57e-44d6dc68bc8d/jianfu"}
+export BASE_DATA_PATH=${BASE_DATA_PATH:-"${PROJECT_ROOT}"}
+# util/data_utils.py rewrites dataset paths using HOME_SSD_PATH, so ensure it is visible to Python
+export HOME_SSD_PATH=${HOME_SSD_PATH:-"${PROJECT_ROOT}/ssde"}
+
 PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vitb.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-"/media/gpuadmin/673eec07-52e0-4ff1-b57e-44d6dc68bc8d/jianfu/save/FM/fd_vitb_fd_depth_fm_v1_camera_vggt-like_train1_20251111_123132/checkpoint_latest.pth"}
 
 # ------------------------------------------------------------------------------
 # Output logging
 # ------------------------------------------------------------------------------
-SAVE_ROOT=${SAVE_ROOT:-"${BASE_DATA_PATH}/save/FM"}
+SAVE_ROOT=${SAVE_ROOT:-"${PROJECT_ROOT}/save/FM"}
 RUN_ID=$(date +%Y%m%d_%H%M%S)
 SAMPLE_TAG="camera_${CAMERA_HEAD_MODE}_train${TRAIN_SAMPLE_STEP}"
 SAVE_PATH="${SAVE_ROOT}/fd_${ENCODER}_${DATASET_CONFIG_NAME}_${SAMPLE_TAG}_${RUN_ID}"
