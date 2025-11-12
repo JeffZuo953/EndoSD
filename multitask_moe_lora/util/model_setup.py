@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.distributed as dist
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR, _LRScheduler
 import logging
 from typing import Tuple, Dict, Any, Optional
 
@@ -564,16 +564,30 @@ def _create_lr_scheduler(optimizer: torch.optim.Optimizer,
     total_epochs = max(int(getattr(config, "epochs", 1)), 1)
     if scheduler_type == "poly":
         power = float(getattr(config, "poly_power", 0.9))
-
-        def _poly_lambda(epoch: int) -> float:
-            progress = min(epoch, total_epochs) / total_epochs
-            return (1.0 - progress) ** power
-
-        logger.info(f"Using polynomial LR scheduler (power={power:.3f}).")
-        return LambdaLR(optimizer, lr_lambda=_poly_lambda)
+        steps_per_epoch = max(int(getattr(config, "train_steps_per_epoch", 0)), 1)
+        total_steps = total_epochs * steps_per_epoch
+        logger.info(f"Using polynomial LR scheduler (power={power:.3f}, total_steps={total_steps}).")
+        return PolyLRScheduler(optimizer, total_steps=total_steps, power=power)
 
     if scheduler_type == "cosine":
         logger.info("Using cosine LR scheduler.")
         return CosineAnnealingLR(optimizer, T_max=total_epochs)
 
     raise ValueError(f"Unsupported lr_scheduler '{scheduler_type}'.")
+class PolyLRScheduler(torch.optim.lr_scheduler._LRScheduler):
+    """Polynomial LR scheduler stepping per iteration."""
+
+    def __init__(self,
+                 optimizer: torch.optim.Optimizer,
+                 total_steps: int,
+                 power: float = 0.9,
+                 last_epoch: int = -1):
+        self.total_steps = max(int(total_steps), 1)
+        self.power = max(float(power), 1e-6)
+        self._step_on_iteration = True
+        super().__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        progress = min(self.last_epoch, self.total_steps) / self.total_steps
+        factor = (1.0 - progress) ** self.power
+        return [base_lr * factor for base_lr in self.base_lrs]

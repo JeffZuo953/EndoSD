@@ -15,8 +15,8 @@ export FM_FILTER_SEG_HEAD=${FM_FILTER_SEG_HEAD:-1}
 # ------------------------------------------------------------------------------
 # Hardware / distributed configuration
 # ------------------------------------------------------------------------------
-NUM_GPUS=${NUM_GPUS:-3}
-CUDA_DEVICES=${CUDA_DEVICES:-"3,4,5"}
+NUM_GPUS=${NUM_GPUS:-4}
+CUDA_DEVICES=${CUDA_DEVICES:-"0,1,3,5"}
 MASTER_PORT=${MASTER_PORT:-20765}
 
 # ------------------------------------------------------------------------------
@@ -26,7 +26,7 @@ ENCODER=${ENCODER:-"vitb"}        # {vits, vitb, vitl, dinov3_*}
 FEATURES=${FEATURES:-64}
 EPOCHS=${EPOCHS:-120}
 BATCH_SIZE=${BATCH_SIZE:-18}
-VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-24}
+VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-64}
 LEARNING_RATE=${LEARNING_RATE:-5e-6}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
 IMG_SIZE=${IMG_SIZE:-518}
@@ -35,15 +35,15 @@ MIN_DEPTH=${MIN_DEPTH:-1e-6}
 MIXED_PRECISION=${MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 CAMERA_HEAD_MODE=${CAMERA_HEAD_MODE:-"simple"}
-CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.3}
+CAMERA_LOSS_WEIGHT=${CAMERA_LOSS_WEIGHT:-0.2}
 CAMERA_LOSS_TYPE=${CAMERA_LOSS_TYPE:-"l2"}   # l1 | l2
-CAMERA_LR=${CAMERA_LR:-5e-4}
+CAMERA_LR=${CAMERA_LR:-1e-5}
 LR_SCHEDULER=${LR_SCHEDULER:-"poly"}
 
 FM_SAMPLE_MODE=${FM_SAMPLE_MODE:-"full"}   # full | sample
 TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
-VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-1}
-VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-100}
+VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:--1}
+VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-64}
 MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
 
 
@@ -58,14 +58,15 @@ PATH_TRANSFORM_NAME=${PATH_TRANSFORM_NAME:-"none"}
 
 TRAIN_DATASET_INCLUDE=${TRAIN_DATASET_INCLUDE:-"SCARED,StereoMIS,EndoVis2017,EndoVis2018,EndoSynth,dVPN,C3VDv2,SimCol,Kidney3D"}
 VAL_DATASET_INCLUDE=${VAL_DATASET_INCLUDE:-"hamlyn,EndoNeRF,C3VD,EndoMapper,Kidney3D,EndoVis2017"}
+
 ORIG_TRAIN_DATASET_INCLUDE="${TRAIN_DATASET_INCLUDE}"
 ORIG_VAL_DATASET_INCLUDE="${VAL_DATASET_INCLUDE}"
 
 # ------------------------------------------------------------------------------
 # Checkpoint configuration
 # ------------------------------------------------------------------------------
-BASE_DATA_PATH=${BASE_DATA_PATH:-"/data/ziyi/multitask"}
-HOME_SSD_PATH=${HOME_SSD_PATH:-"$HOME/ssde"}
+BASE_DATA_PATH=${BASE_DATA_PATH:-"/media/gpuadmin/673eec07-52e0-4ff1-b57e-44d6dc68bc8d/jianfu"}
+HOME_SSD_PATH=${HOME_SSD_PATH:-"${BASE_DATA_PATH}/ssde"}
 PRETRAINED_WEIGHTS=${PRETRAINED_WEIGHTS:-"${BASE_DATA_PATH}/pretained/depth_anything_v2_vitb.pth"}
 RESUME_CHECKPOINT=${RESUME_CHECKPOINT:-""}
 
