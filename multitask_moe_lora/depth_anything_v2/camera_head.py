@@ -121,12 +121,26 @@ class VGGTLiteCameraHead(_BaseCameraHead):
         adapter_rank: int = 0,
         adapter_alpha: int = 1,
         adapter_dropout: float = 0.0,
+        num_register_tokens: int = 4,
+        num_object_tokens: int = 0,
     ) -> None:
         super().__init__(embed_dim, hidden_dim, adapter_rank, adapter_alpha, adapter_dropout)
         self.camera_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.register_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.num_register_tokens = max(0, num_register_tokens)
+        self.num_object_tokens = max(0, num_object_tokens)
+        if self.num_register_tokens > 0:
+            self.register_tokens = nn.Parameter(torch.zeros(1, self.num_register_tokens, embed_dim))
+        else:
+            self.register_tokens = None
+        if self.num_object_tokens > 0:
+            self.object_tokens = nn.Parameter(torch.zeros(1, self.num_object_tokens, embed_dim))
+        else:
+            self.object_tokens = None
         nn.init.normal_(self.camera_token, std=1e-6)
-        nn.init.normal_(self.register_token, std=1e-6)
+        if self.register_tokens is not None:
+            nn.init.normal_(self.register_tokens, std=1e-6)
+        if self.object_tokens is not None:
+            nn.init.normal_(self.object_tokens, std=1e-6)
 
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
@@ -147,13 +161,57 @@ class VGGTLiteCameraHead(_BaseCameraHead):
             Tensor [B, 4] with normalized fx, fy, cx, cy.
         """
         bsz = patch_tokens.size(0)
-        camera_tok = self.camera_token.expand(bsz, -1, -1)
-        register_tok = self.register_token.expand(bsz, -1, -1)
-        tokens = torch.cat([camera_tok, register_tok, self.input_adapter(patch_tokens)], dim=1)
+        token_chunks = [self.camera_token.expand(bsz, -1, -1)]
+        if self.register_tokens is not None:
+            token_chunks.append(self.register_tokens.expand(bsz, -1, -1))
+        if self.object_tokens is not None:
+            token_chunks.append(self.object_tokens.expand(bsz, -1, -1))
+        token_chunks.append(self.input_adapter(patch_tokens))
+        tokens = torch.cat(token_chunks, dim=1)
         encoded = self.encoder(tokens)
         camera_feat = encoded[:, 0]  # camera token position
         logits = self.output_head(camera_feat)
         return self._normalize_output(logits)
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        """
+        Ensure legacy checkpoints (with only camera token or single register token)
+        can be loaded by synthesizing the new multi-token parameters on-the-fly.
+        """
+        cam_key = prefix + "camera_token"
+        reg_key = prefix + "register_tokens"
+        legacy_reg_key = prefix + "register_token"
+        obj_key = prefix + "object_tokens"
+
+        def _expand_like(tensor, target_tokens: int):
+            if tensor.dim() != 3:
+                return tensor
+            if tensor.shape[1] == target_tokens:
+                return tensor
+            return tensor[:, :1].expand(tensor.shape[0], target_tokens, tensor.shape[-1]).clone()
+
+        # Handle legacy single register token parameter name
+        if legacy_reg_key in state_dict and reg_key not in state_dict:
+            state_dict[reg_key] = state_dict.pop(legacy_reg_key)
+
+        # If checkpoint lacks register/object tokens, seed them from camera token
+        if self.num_register_tokens > 0 and reg_key not in state_dict:
+            if cam_key in state_dict:
+                state_dict[reg_key] = state_dict[cam_key].expand(
+                    -1, self.num_register_tokens, -1
+                ).clone()
+        elif self.num_register_tokens > 0 and reg_key in state_dict:
+            state_dict[reg_key] = _expand_like(state_dict[reg_key], self.num_register_tokens)
+
+        if self.num_object_tokens > 0 and obj_key not in state_dict and cam_key in state_dict:
+            state_dict[obj_key] = state_dict[cam_key].expand(
+                -1, self.num_object_tokens, -1
+            ).clone()
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
 
 
 class ProLikeCameraHead(_BaseCameraHead):
