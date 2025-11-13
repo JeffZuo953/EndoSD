@@ -1085,11 +1085,14 @@ def validate_and_visualize(model: torch.nn.Module,
             stats_tensor[11] += (abs_diff <= 0.02).sum()
 
     elif task_type == 'seg':
-        seg_metrics = {
-            "NO": SegMetric(config.num_classes),
-            "LS": SegMetric(config.num_classes),
-            "combined": SegMetric(config.num_classes),
-        }
+        dataset_seg_metrics: Dict[str, SegMetric] = {}
+
+        def _resolve_dataset_metric(dataset_label: Optional[str], raw_source: str) -> SegMetric:
+            name_key = (dataset_label or raw_source or "unknown").strip().lower()
+            if name_key not in dataset_seg_metrics:
+                valid_ids = _lookup_dataset_token_ids(name_key, batch.get("clip_id") if isinstance(batch, dict) else None)
+                dataset_seg_metrics[name_key] = SegMetric(config.num_classes, valid_classes=valid_ids)
+            return dataset_seg_metrics[name_key]
 
     def _process_validation_batch(batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
         input_img = batch["image"].cuda()
@@ -1552,7 +1555,6 @@ def validate_and_visualize(model: torch.nn.Module,
                 _export_depth_visuals(depth_visual_samples, config.save_path, epoch + 1, logger)
 
         elif task_type == 'seg':
-            # 计算指标
             seg_metrics_payload: Dict[str, Dict[str, float]] = {}
             for name, metric_calc in seg_metrics.items():
                 seg_scores = metric_calc.get_scores()
@@ -1562,11 +1564,11 @@ def validate_and_visualize(model: torch.nn.Module,
                     for k, v in seg_scores.items()
                     if isinstance(v, (int, float)) and not (isinstance(v, float) and np.isnan(v))
                 }
-                display_name = name.upper() if name != 'combined' else name.capitalize()
-                logger.info(f"[{display_name}] Seg Validation Epoch {epoch} - mIoU: {seg_scores.get('miou', 0):.4f}, mDice: {seg_scores.get('mdice', 0):.4f}")
+                display_name = _sanitize_name(name) or name
+                logger.info(f"[Dataset:{display_name}] Seg Validation Epoch {epoch} - mIoU: {seg_scores.get('miou', 0):.4f}, mDice: {seg_scores.get('mdice', 0):.4f}")
                 for k, v in seg_scores.items():
                     if isinstance(v, (int, float)) and not np.isnan(v):
-                        writer.add_scalar(f'Metrics/Seg_{display_name}/{k}', v, epoch)
+                        writer.add_scalar(f'Metrics/Seg_Dataset/{display_name}/{k}', v, epoch)
                 logger.info(f"    Overall Accuracy: {seg_scores.get('acc_overall', 0):.4f}, Mean IoU: {seg_scores.get('miou', 0):.4f}")
             _persist_segmentation_metrics(config.save_path, epoch, seg_metrics_payload, logger)
 

@@ -108,10 +108,10 @@ def _lookup_dataset_token_ids(dataset_name: Optional[str], clip_id: Optional[str
         return []
     if isinstance(value, dict):
         clip_key = clip_id.strip().lower() if clip_id else None
-        if clip_key and clip_key in value:
-            return list(value[clip_key])
-        default = value.get("default")
-        return list(default) if default else []
+    if clip_key and clip_key in value:
+        return list(value[clip_key])
+    default = value.get("default")
+    return list(default) if default else []
     return list(value)
 
 
