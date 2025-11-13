@@ -158,6 +158,19 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="CSV path for camera metrics (default: <output-root>/camera_report.csv).",
     )
+    parser.add_argument(
+        "--mask-depth",
+        dest="mask_depth",
+        action="store_true",
+        help="Zero out predictions where GT<=0 or pred>max_depth (default: enabled).",
+    )
+    parser.add_argument(
+        "--no-mask-depth",
+        dest="mask_depth",
+        action="store_false",
+        help="Disable masking (keep raw predictions).",
+    )
+    parser.set_defaults(mask_depth=True)
     return parser.parse_args()
 
 
@@ -581,15 +594,17 @@ def run_inference(args: argparse.Namespace) -> None:
                 w = meta["width"]
                 pred_slice = pred_depth[idx, 0, :h, :w]
                 pred_slice = torch.nan_to_num(pred_slice, nan=0.0, posinf=0.0, neginf=0.0)
-                if gt_depth is not None:
-                    gt_slice = gt_depth[idx, 0, :h, :w]
-                    invalid = (gt_slice <= 0) | (~torch.isfinite(gt_slice))
-                    pred_slice = pred_slice.clone()
-                    pred_slice[invalid] = 0.0
-                above_max = pred_slice > args.max_depth
-                if above_max.any():
-                    pred_slice = pred_slice.clone()
-                    pred_slice[above_max] = 0.0
+                if args.mask_depth:
+                    if gt_depth is not None:
+                        gt_slice = gt_depth[idx, 0, :h, :w]
+                        invalid = (gt_slice <= 0) | (~torch.isfinite(gt_slice))
+                        if invalid.any():
+                            pred_slice = pred_slice.clone()
+                            pred_slice[invalid] = 0.0
+                    above_max = pred_slice > args.max_depth
+                    if above_max.any():
+                        pred_slice = pred_slice.clone()
+                        pred_slice[above_max] = 0.0
 
                 pred_fx = pred_fy = pred_cx = pred_cy = np.nan
                 if camera_pred_norm is not None:
