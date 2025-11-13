@@ -1075,24 +1075,14 @@ def create_datasets(config: TrainingConfig) -> tuple:
         'ls_bundle': {
             "depth_train_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoSynth",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth[val]",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018[val]",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
@@ -1107,36 +1097,21 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "EndoVis2017",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
-                    "name": "EndoNeRF[train]",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF[val]",
+                    "name": "EndoNeRF",
                 },
             ],
             "seg_train_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoSynth",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth[val]",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018[val]",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
@@ -1151,14 +1126,9 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "name": "EndoVis2017",
                 },
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/all_cache.txt",
                     "dataset_type": "LS",
-                    "name": "EndoNeRF[train]",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF[val]",
+                    "name": "EndoNeRF",
                 },
             ],
         },
@@ -1403,106 +1373,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 lambda p: p.replace("/media/ssd2t/jianfu/data/polyp/kvasir-seg/cache",
                                     "/data/ziyi/multitask/data/NO/kvasir-seg/media/ssd2t/jianfu/data/polyp/kvasir-seg/cache"),
         },
-        'ls_default': {
-            "depth_train_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "StereoMIS",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-            "depth_val_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/StereoMIS/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "StereoMIS",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-            "seg_train_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-            "seg_val_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2017",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoVis2018",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-            ],
-        }
     }
 
     transform_map = PATH_TRANSFORM_CONFIGS.get(active_transform, {}) if active_transform else {}
