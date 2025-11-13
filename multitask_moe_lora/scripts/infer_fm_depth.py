@@ -15,8 +15,10 @@ import logging
 import os
 import sys
 from collections import OrderedDict
+import inspect
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+import importlib
 
 import numpy as np
 import torch
@@ -306,12 +308,68 @@ def _build_loader(dataset, batch_size: int, num_workers: int, encoder: str) -> D
     )
 
 
+def _ensure_backbone_extra_token_support(logger: logging.Logger) -> None:
+    """
+    Some backbone implementations (e.g., upstream DinoVisionTransformer) do not accept the
+    `extra_tokens` keyword that our multitask wrapper tries to pass when semantic tokens are
+    enabled. Patch them once at runtime so the kwarg is silently ignored instead of crashing.
+    """
+
+    def _patch_module(module) -> None:
+        cls = getattr(module, "DinoVisionTransformer", None)
+        if cls is None:
+            return
+        if getattr(cls, "_extra_token_compat_patched", False):
+            return
+        method = getattr(cls, "get_intermediate_layers", None)
+        if method is None:
+            return
+        try:
+            signature = inspect.signature(method)
+        except (TypeError, ValueError):
+            setattr(cls, "_extra_token_compat_patched", True)
+            return
+        if "extra_tokens" in signature.parameters:
+            setattr(cls, "_extra_token_compat_patched", True)
+            return
+        original = method
+
+        def wrapper(self, *args, **kwargs):
+            kwargs.pop("extra_tokens", None)
+            return original(self, *args, **kwargs)
+        wrapper.__name__ = original.__name__
+        wrapper.__doc__ = original.__doc__
+        setattr(cls, "get_intermediate_layers", wrapper)
+        setattr(cls, "_extra_token_compat_patched", True)
+        logger.warning(
+            "Patched %s.get_intermediate_layers to ignore unsupported `extra_tokens` kwarg.",
+            cls.__name__,
+        )
+
+    module_names = [
+        "depth_anything_v2.dinov2",
+        "depth_anything_v2.dinov3",
+        "multitask_moe_lora.depth_anything_v2.dinov2",
+        "multitask_moe_lora.depth_anything_v2.dinov3",
+    ]
+    for name in module_names:
+        try:
+            module = importlib.import_module(name)
+        except ModuleNotFoundError:
+            continue
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to import %s for extra token patch: %s", name, exc)
+            continue
+        _patch_module(module)
+
+
 def _prepare_model(
     config: TrainingConfig,
     logger: logging.Logger,
     device_ids: Sequence[int],
 ) -> torch.nn.Module:
     torch.cuda.set_device(device_ids[0])
+    _ensure_backbone_extra_token_support(logger)
     model = create_and_setup_model(config, logger)
     if len(device_ids) > 1:
         logger.info("Using DataParallel across GPUs: %s", ",".join(map(str, device_ids)))
@@ -535,21 +593,42 @@ def run_inference(args: argparse.Namespace) -> None:
     saved = 0
     camera_stats: Dict[str, Dict[str, float]] = {}
 
+    dp_state: Dict[str, bool] = {"force_single": False}
+
+    def _run_single_device(batch_images: torch.Tensor) -> Dict[str, torch.Tensor]:
+        if isinstance(model, torch.nn.DataParallel):
+            primary_device = model.device_ids[0]
+            batch_images = batch_images.to(primary_device, non_blocking=True)
+            with torch.cuda.device(primary_device):
+                return model.module(batch_images, task="depth")
+        return model(batch_images, task="depth")
+
     def _call_model(batch_images: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
         Run the model while handling micro-batches smaller than the DataParallel replica count.
 
         When batch size < #GPUs, DataParallel would try to scatter an empty tensor to some replica,
         causing it to call forward() without positional args. We fall back to single-GPU execution
-        on the first device in that case.
+        on the first device in that case. If PyTorch still raises the positional-arg TypeError, we
+        permanently switch to single-device inference for the rest of the run.
         """
         if isinstance(model, torch.nn.DataParallel):
             num_replicas = len(model.device_ids)
-            if batch_images.size(0) < num_replicas:
-                primary_device = model.device_ids[0]
-                batch_images = batch_images.to(primary_device, non_blocking=True)
-                with torch.cuda.device(primary_device):
-                    return model.module(batch_images, task="depth")
+            if dp_state["force_single"] or batch_images.size(0) < num_replicas:
+                return _run_single_device(batch_images)
+            try:
+                return model(batch_images, task="depth")
+            except TypeError as exc:
+                if "missing 1 required positional argument" in str(exc):
+                    logger.warning(
+                        "DataParallel failed due to empty micro-batch (batch=%d, replicas=%d); "
+                        "falling back to single-device inference.",
+                        batch_images.size(0),
+                        num_replicas,
+                    )
+                    dp_state["force_single"] = True
+                    return _run_single_device(batch_images)
+                raise
         return model(batch_images, task="depth")
 
     with torch.no_grad():
@@ -559,7 +638,7 @@ def run_inference(args: argparse.Namespace) -> None:
             gt_depth = batch.get("depth")
             if gt_depth is not None:
                 gt_depth = gt_depth.cuda(non_blocking=True)
-            with torch.cuda.amp.autocast(enabled=args.use_amp, dtype=amp_dtype):
+            with torch.amp.autocast("cuda", enabled=args.use_amp, dtype=amp_dtype):
                 outputs = _call_model(images)
                 pred_depth = outputs["depth"]
             camera_pred_norm = outputs.get("camera_intrinsics_norm")

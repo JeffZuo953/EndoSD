@@ -29,12 +29,14 @@ class TrainingConfig:
     camera_head_loss_scale: float = 1.0
 
     # 模式选择参数
-    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "endo-unid", "mtlora", "gl"
+    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "endo-unid", "mtlora", "mtlga", "mtoat", "endounid"
 
     # LoRA 参数
     use_lora: bool = False  # 由mode参数自动设置
     lora_r: int = 0
     lora_alpha: int = 1
+    use_semantic_tokens: bool = False
+    semantic_token_count: int = 0
 
     # EndoUniD 专用参数
     endo_unid_shared_shards: int = 1
@@ -149,11 +151,13 @@ def create_parser() -> argparse.ArgumentParser:
     # 模式选择和PEFT参数
     parser.add_argument("--mode",
                         default="original",
-                        choices=["original", "lora-only", "legacy-lora", "endo-unid", "mtlora", "mtlga"],
-                        help="Training mode: original, lora-only, legacy-lora (attention-only LoRA), endo-unid, mtlora (shared+task LoRA), or mtlga (mtlora + Gram loss)")
+                        choices=["original", "lora-only", "legacy-lora", "endo-unid", "mtlora", "mtlga", "mtoat", "endounid"],
+                        help="Training mode: original, lora-only, legacy-lora (attention-only LoRA), endo-unid, mtlora (shared+task LoRA), mtoat (mtlora + adaptive tokens), mtlga (mtlora + Gram loss), or endounid (mtlga + adaptive tokens)")
 
     parser.add_argument("--lora-r", default=4, type=int, help="LoRA rank (r)")
     parser.add_argument("--lora-alpha", default=8, type=int, help="LoRA alpha")
+    parser.add_argument("--semantic-token-count", default=0, type=int,
+                        help="Number of adaptive semantic tokens (ignored unless mode requires them)")
 
     # EndoUniD specific knobs
     parser.add_argument("--endo-unid-shared-shards", default=2, type=int,
@@ -276,11 +280,12 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
 
     # 根据mode参数设置use_lora（MoE 模式已移除）
     mode = getattr(args, 'mode', 'original')
-    if mode in ('endo-unid', 'lora-only', 'legacy-lora', 'mtlora', 'mtlga'):
+    if mode in ('endo-unid', 'lora-only', 'legacy-lora', 'mtlora', 'mtlga', 'mtoat', 'endounid'):
         use_lora = True
     else:
         use_lora = False
     use_moe = False
+    semantic_token_count = getattr(args, 'semantic_token_count', 0)
 
     def _parse_list(value: Optional[str]) -> Optional[List[str]]:
         if not value:
@@ -310,6 +315,8 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           mode=mode,
                           use_lora=use_lora,
                           use_moe=use_moe,
+                          use_semantic_tokens=False,
+                          semantic_token_count=semantic_token_count,
                           num_experts=getattr(args, 'num_experts', 8),
                           top_k=getattr(args, 'top_k', 2),
                           lora_r=getattr(args, 'lora_r', 4),
@@ -438,6 +445,11 @@ def validate_config(config: TrainingConfig) -> List[str]:
     if config.camera_loss_type.lower() not in {"l1", "l2"}:
         errors.append("camera_loss_type must be either 'l1' or 'l2'")
 
+    if config.semantic_token_count < 0:
+        errors.append("semantic_token_count must be >= 0")
+    if config.use_semantic_tokens and config.semantic_token_count == 0:
+        errors.append("semantic_token_count must be > 0 when semantic tokens are enabled")
+
     # EndoUniD checks
     if config.mode == "endo-unid":
         if config.encoder not in {"vits", "vitb"}:
@@ -461,6 +473,15 @@ def parse_and_validate_config() -> TrainingConfig:
     parser = create_parser()
     args = parser.parse_args()
     config = args_to_config(args)
+
+    semantic_token_modes = {"mtoat", "endounid"}
+    if config.mode in semantic_token_modes:
+        config.use_semantic_tokens = True
+        if config.semantic_token_count <= 0:
+            config.semantic_token_count = 10
+    else:
+        config.use_semantic_tokens = False
+        config.semantic_token_count = 0
 
     # 验证配置
     errors = validate_config(config)

@@ -108,7 +108,7 @@ SAVE_INTERVAL=${SAVE_INTERVAL:-5}
 USE_MIXED_PRECISION=${USE_MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
 
-# Mode selection: original | lora-only | legacy-lora | endo-unid | mtlora | mtlga
+# Mode selection: original | lora-only | legacy-lora | endo-unid | mtlora | mtlga | mtoat | endounid
 MODE=${MODE:-"legacy-lora"}
 
 # Dataset profile: ENDO (EndoSynth-only), NO (multi-domain no_bundle), LS (ls_bundle)
@@ -176,8 +176,20 @@ EXTRA_MODE_ARGS=()
 case "${MODE}" in
     original)
         ;;
-    lora-only|legacy-lora|mtlora|mtlga)
+    lora-only|legacy-lora|mtlora|mtlga|mtoat|endounid)
         EXTRA_MODE_ARGS+=(--lora-r "${LORA_R:-4}" --lora-alpha "${LORA_ALPHA:-8}")
+        if [[ "${MODE}" == "mtlga" || "${MODE}" == "endounid" ]]; then
+            EXTRA_MODE_ARGS+=(--ga-loss-weight "${GA_LOSS_WEIGHT}")
+            EXTRA_MODE_ARGS+=(--ga-loss-start-epoch "${GA_LOSS_START_EPOCH}")
+        fi
+        if [[ "${MODE}" == "mtoat" || "${MODE}" == "endounid" ]]; then
+            SEM_TOKENS=${SEMANTIC_TOKEN_COUNT:-0}
+            if [[ "${SEM_TOKENS}" -le 0 ]]; then
+                SEM_TOKENS=10
+            fi
+            export SEMANTIC_TOKEN_COUNT="${SEM_TOKENS}"
+            EXTRA_MODE_ARGS+=(--semantic-token-count "${SEMANTIC_TOKEN_COUNT}")
+        fi
         ;;
     endo-unid)
         EXTRA_MODE_ARGS+=(
@@ -198,11 +210,6 @@ case "${MODE}" in
         exit 1
         ;;
 esac
-
-if [[ "${MODE}" == "mtlga" ]]; then
-    EXTRA_MODE_ARGS+=(--ga-loss-weight "${GA_LOSS_WEIGHT}")
-    EXTRA_MODE_ARGS+=(--ga-loss-start-epoch "${GA_LOSS_START_EPOCH}")
-fi
 
 ###############################################
 # Paths / logging
@@ -233,6 +240,9 @@ echo "  Image Size:          ${IMG_SIZE}"
 echo "  Save Path:           ${SAVE_PATH}"
 if [[ "${MODE}" == "mtlga" ]]; then
     echo "  GA Loss:             weight=${GA_LOSS_WEIGHT}, start_epoch=${GA_LOSS_START_EPOCH}"
+fi
+if [[ "${MODE}" == "mtoat" || "${MODE}" == "endounid" ]]; then
+    echo "  Semantic Tokens:     count=${SEMANTIC_TOKEN_COUNT}"
 fi
 echo "============================================================"
 

@@ -235,6 +235,8 @@ def create_and_setup_model(config: TrainingConfig, logger: logging.Logger) -> to
             "camera_alpha": config.endo_unid_camera_alpha,
             "dropout": config.endo_unid_dropout,
         },
+        use_semantic_tokens=getattr(config, "use_semantic_tokens", False),
+        semantic_token_count=getattr(config, "semantic_token_count", 0),
     )
     
     # 检查是否在分布式环境中
@@ -324,6 +326,8 @@ def _validate_backbone_config(model: torch.nn.Module,
             lora_r=config.lora_r,
             lora_alpha=config.lora_alpha,
             camera_head_mode=getattr(config, "camera_head_mode", "none"),
+            use_semantic_tokens=getattr(config, "use_semantic_tokens", False),
+            semantic_token_count=getattr(config, "semantic_token_count", 0),
         )
         model.cuda()
         logger.info(f"Recreated model with correct encoder: {config.encoder}")

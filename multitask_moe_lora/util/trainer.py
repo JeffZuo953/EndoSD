@@ -85,7 +85,8 @@ class MultiTaskTrainer(BaseTrainer):
             self._camera_grad_scale = self._camera_head_weight / self._camera_backbone_weight
         self._ga_loss_weight = float(getattr(self.config, 'ga_loss_weight', 0.0))
         self._ga_loss_start_epoch = int(getattr(self.config, 'ga_loss_start_epoch', 0))
-        self._ga_loss_enabled = self._ga_loss_weight > 0.0 and self.config.mode.lower() == 'gl'
+        mode_lower = self.config.mode.lower()
+        self._ga_loss_enabled = self._ga_loss_weight > 0.0 and mode_lower in {'gl', 'mtlga', 'endounid'}
         if self._ga_loss_enabled and getattr(self.config, "disable_seg_head", False):
             self.logger.warning("GA loss requested but segmentation head is disabled; disabling GA loss.")
             self._ga_loss_enabled = False
@@ -161,6 +162,16 @@ class MultiTaskTrainer(BaseTrainer):
             if camera_pred is not None:
                 msg.append(self._describe_tensor(camera_pred, "camera_pred"))
         self.logger.error(" | ".join(filter(None, msg)))
+
+    def _build_semantic_token_kwargs(self, batch: Optional[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
+        if batch is None or not getattr(self.config, "use_semantic_tokens", False):
+            return {}
+        token_ids = batch.get("token_ids") or batch.get("semantic_token_ids")
+        if token_ids is None:
+            return {}
+        if not torch.is_tensor(token_ids):
+            token_ids = torch.as_tensor(token_ids, dtype=torch.long)
+        return {"semantic_token_ids": token_ids.cuda(non_blocking=True)}
 
     def _normalize_meta_list(self, value: Any, batch_size: int) -> list:
         if value is None:
@@ -862,7 +873,13 @@ class MultiTaskTrainer(BaseTrainer):
                     img_seg = batch_seg["image"].cuda()
                     gt_seg = batch_seg["semseg_mask"].cuda().long()
                     seg_task = 'both' if self._ga_loss_enabled else 'seg'
-                    outputs_seg = self.model(img_seg, task=seg_task, return_features=self._ga_loss_enabled)
+                    token_kwargs = self._build_semantic_token_kwargs(batch_seg)
+                    outputs_seg = self.model(
+                        img_seg,
+                        task=seg_task,
+                        return_features=self._ga_loss_enabled,
+                        **token_kwargs,
+                    )
                     pred_seg = outputs_seg['seg']
                     pred_seg = torch.nan_to_num(pred_seg, nan=0.0).clamp_(-100.0, 100.0)
                     valid_mask = (gt_seg >= 0) & (gt_seg < self.config.num_classes)
@@ -942,7 +959,13 @@ class MultiTaskTrainer(BaseTrainer):
             gt_depth = torch.nan_to_num(raw_gt_depth, nan=0.0, posinf=max_depth_cfg, neginf=0.0)
             gt_depth = gt_depth.clamp_(min=min_safe_depth, max=max_depth_cfg)
             model_task = 'both' if self._ga_loss_enabled else 'depth'
-            outputs_depth = self.model(img_depth, task=model_task, return_features=self._ga_loss_enabled)
+            token_kwargs = self._build_semantic_token_kwargs(batch_depth)
+            outputs_depth = self.model(
+                img_depth,
+                task=model_task,
+                return_features=self._ga_loss_enabled,
+                **token_kwargs,
+            )
             pred_depth = outputs_depth['depth']
             pred_depth = torch.nan_to_num(pred_depth, nan=0.0, posinf=max_depth_cfg * 1.25, neginf=0.0)
             pred_depth = pred_depth.clamp_(min=min_safe_depth, max=max_depth_cfg * 1.25)
@@ -1171,6 +1194,7 @@ class MultiTaskTrainer(BaseTrainer):
             if extra_optimizer is not None:
                 extra_optimizer.zero_grad()
             input_img = batch["image"].cuda()
+            token_kwargs = self._build_semantic_token_kwargs(batch)
 
             self._log_dataset_progress("Train", task_label, epoch, batch.get("dataset_name"), tracker)
 
@@ -1183,7 +1207,12 @@ class MultiTaskTrainer(BaseTrainer):
                 if task == 'depth':
                     depth_gt = batch["depth"].cuda()
                     depth_task = 'both' if self._ga_loss_enabled else 'depth'
-                    outputs = self.model(input_img, task=depth_task, return_features=self._ga_loss_enabled)
+                    outputs = self.model(
+                        input_img,
+                        task=depth_task,
+                        return_features=self._ga_loss_enabled,
+                        **token_kwargs,
+                    )
                     depth_pred = outputs['depth']
 
                     # Sanitize depth predictions to avoid propagating NaNs/Infs into the loss.
@@ -1222,7 +1251,12 @@ class MultiTaskTrainer(BaseTrainer):
                 else:
                     seg_gt = batch["semseg_mask"].cuda().long()
                     seg_task = 'both' if self._ga_loss_enabled else 'seg'
-                    outputs = self.model(input_img, task=seg_task, return_features=self._ga_loss_enabled)
+                    outputs = self.model(
+                        input_img,
+                        task=seg_task,
+                        return_features=self._ga_loss_enabled,
+                        **token_kwargs,
+                    )
                     seg_pred = outputs['seg']
                     seg_pred = torch.nan_to_num(seg_pred, nan=0.0)
                     seg_pred = seg_pred.clamp_(-100.0, 100.0)

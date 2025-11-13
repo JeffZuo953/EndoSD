@@ -321,14 +321,23 @@ class DinoVisionTransformer_LoRA(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1).to(previous_dtype)
 
-    def prepare_tokens_with_masks(self, x, masks=None):
+    def prepare_tokens_with_masks(self, x, masks=None, extra_tokens=None):
         B, nc, w, h = x.shape
-        x = self.patch_embed(x)
+        tokens = self.patch_embed(x)
         if masks is not None:
-            x = torch.where(masks.unsqueeze(-1), self.mask_token.to(x.dtype).unsqueeze(0), x)
+            tokens = torch.where(masks.unsqueeze(-1), self.mask_token.to(tokens.dtype).unsqueeze(0), tokens)
 
-        x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
-        x = x + self.interpolate_pos_encoding(x, w, h)
+        cls_tokens = self.cls_token.expand(tokens.shape[0], -1, -1)
+        base_seq = torch.cat((cls_tokens, tokens), dim=1)
+        pos_embed = self.interpolate_pos_encoding(base_seq, w, h)
+        cls_tokens = cls_tokens + pos_embed[:, :1]
+        patch_tokens = tokens + pos_embed[:, 1:]
+
+        parts = [cls_tokens]
+        if extra_tokens is not None:
+            parts.append(extra_tokens.to(dtype=patch_tokens.dtype))
+        parts.append(patch_tokens)
+        x = torch.cat(parts, dim=1)
 
         if self.register_tokens is not None:
             x = torch.cat(
@@ -342,8 +351,15 @@ class DinoVisionTransformer_LoRA(nn.Module):
 
         return x
 
-    def forward_features_list(self, x_list, masks_list):
-        x = [self.prepare_tokens_with_masks(x, masks) for x, masks in zip(x_list, masks_list)]
+    def forward_features_list(self, x_list, masks_list, extra_tokens=None):
+        if extra_tokens is None or torch.is_tensor(extra_tokens):
+            token_list = [extra_tokens] * len(x_list)
+        else:
+            token_list = extra_tokens
+        x = [
+            self.prepare_tokens_with_masks(x, masks, extra_tokens=tokens)
+            for x, masks, tokens in zip(x_list, masks_list, token_list)
+        ]
         for blk in self.blocks:
             x = blk(x)
 
@@ -362,11 +378,11 @@ class DinoVisionTransformer_LoRA(nn.Module):
             )
         return output
 
-    def forward_features(self, x, masks=None):
+    def forward_features(self, x, masks=None, extra_tokens=None):
         if isinstance(x, list):
-            return self.forward_features_list(x, masks)
+            return self.forward_features_list(x, masks, extra_tokens=extra_tokens)
 
-        x = self.prepare_tokens_with_masks(x, masks)
+        x = self.prepare_tokens_with_masks(x, masks, extra_tokens=extra_tokens)
 
         for blk in self.blocks:
             x = blk(x)
@@ -380,8 +396,8 @@ class DinoVisionTransformer_LoRA(nn.Module):
             "masks": masks,
         }
 
-    def _get_intermediate_layers_not_chunked(self, x, n=1):
-        x = self.prepare_tokens_with_masks(x)
+    def _get_intermediate_layers_not_chunked(self, x, n=1, extra_tokens=None):
+        x = self.prepare_tokens_with_masks(x, extra_tokens=extra_tokens)
         # If n is an int, take the n last blocks. If it's a list, take them
         output, total_block_len = [], len(self.blocks)
         blocks_to_take = range(total_block_len - n, total_block_len) if isinstance(n, int) else n
@@ -392,8 +408,8 @@ class DinoVisionTransformer_LoRA(nn.Module):
         assert len(output) == len(blocks_to_take), f"only {len(output)} / {len(blocks_to_take)} blocks found"
         return output
 
-    def _get_intermediate_layers_chunked(self, x, n=1):
-        x = self.prepare_tokens_with_masks(x)
+    def _get_intermediate_layers_chunked(self, x, n=1, extra_tokens=None):
+        x = self.prepare_tokens_with_masks(x, extra_tokens=extra_tokens)
         output, i, total_block_len = [], 0, len(self.blocks[-1])
         # If n is an int, take the n last blocks. If it's a list, take them
         blocks_to_take = range(total_block_len - n, total_block_len) if isinstance(n, int) else n
@@ -412,12 +428,13 @@ class DinoVisionTransformer_LoRA(nn.Module):
         n: Union[int, Sequence] = 1,  # Layers or n last layers to take
         reshape: bool = False,
         return_class_token: bool = False,
-        norm=True
+        norm=True,
+        extra_tokens: Optional[torch.Tensor] = None,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]]]:
         if self.chunked_blocks:
-            outputs = self._get_intermediate_layers_chunked(x, n)
+            outputs = self._get_intermediate_layers_chunked(x, n, extra_tokens=extra_tokens)
         else:
-            outputs = self._get_intermediate_layers_not_chunked(x, n)
+            outputs = self._get_intermediate_layers_not_chunked(x, n, extra_tokens=extra_tokens)
         if norm:
             outputs = [self.norm(out) for out in outputs]
         class_tokens = [out[:, 0] for out in outputs]
