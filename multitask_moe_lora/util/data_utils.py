@@ -72,6 +72,36 @@ def _normalize_dataset_paths(obj):
     return obj
 
 
+def _coerce_image_tensor(image_field: Any, dataset_name: Optional[str] = None) -> torch.Tensor:
+    """
+    Ensure ``image_field`` is a torch.Tensor, handling tuples/lists produced by older caches.
+
+    Some cached samples saved ``(tensor, metadata)`` tuples under the ``image`` key. This helper
+    unwraps those structures so downstream padding logic can rely on tensor semantics.
+    """
+    if torch.is_tensor(image_field):
+        return image_field
+
+    if isinstance(image_field, (list, tuple)):
+        for candidate in image_field:
+            if torch.is_tensor(candidate):
+                logging.debug(
+                    "Detected tuple-wrapped image tensor for dataset %s; unwrapping.",
+                    dataset_name or "unknown",
+                )
+                return candidate
+        # Fall back to attempting tensor conversion if tuple entries are numeric
+        try:
+            return torch.as_tensor(image_field)
+        except Exception as exc:
+            raise TypeError(f"Unable to coerce image tuple to tensor (dataset={dataset_name})") from exc
+
+    try:
+        return torch.as_tensor(image_field)
+    except Exception as exc:
+        raise TypeError(f"Unsupported image field type: {type(image_field)} (dataset={dataset_name})") from exc
+
+
 def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     多任务数据整理函数
@@ -82,8 +112,12 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     Returns:
         整理后的批次数据字典
     """
-    max_h = max(item["image"].shape[-2] for item in batch)
-    max_w = max(item["image"].shape[-1] for item in batch)
+    processed_items = [
+        (item, _coerce_image_tensor(item["image"], item.get("dataset_name")))
+        for item in batch
+    ]
+    max_h = max(image.shape[-2] for _, image in processed_items)
+    max_w = max(image.shape[-1] for _, image in processed_items)
 
     # 确保尺寸是14的倍数
     stride = 14
@@ -105,8 +139,7 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     camera_sizes_mask: List[bool] = []
     has_camera_sizes = False
 
-    for item in batch:
-        image = item["image"]
+    for item, image in processed_items:
         if torch.is_tensor(image):
             torch.nan_to_num_(image, nan=0.0, posinf=0.0, neginf=0.0)
             if image.dtype.is_floating_point:
@@ -256,8 +289,12 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
 def _make_collate_fn(stride: int):
     """Pad batch H/W to multiple of `stride` (e.g., 14 for DINOv2, 16 for DINOv3)."""
     def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
-        max_h = max(item["image"].shape[-2] for item in batch)
-        max_w = max(item["image"].shape[-1] for item in batch)
+        processed_items = [
+            (item, _coerce_image_tensor(item["image"], item.get("dataset_name")))
+            for item in batch
+        ]
+        max_h = max(image.shape[-2] for _, image in processed_items)
+        max_w = max(image.shape[-1] for _, image in processed_items)
 
         if max_h % stride != 0:
             max_h = max_h + (stride - max_h % stride)
@@ -276,8 +313,7 @@ def _make_collate_fn(stride: int):
         camera_sizes: List[torch.Tensor] = []
         camera_sizes_mask: List[bool] = []
         has_camera_sizes = False
-        for item in batch:
-            image = item["image"]
+        for item, image in processed_items:
             h, w = image.shape[-2:]
             pad_h = max_h - h
             pad_w = max_w - w
