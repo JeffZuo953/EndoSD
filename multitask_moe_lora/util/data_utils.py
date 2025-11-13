@@ -70,8 +70,8 @@ def _load_semantic_token_index_map() -> Dict[str, Union[List[int], Dict[str, Lis
     if not mapping:
         mapping = {
             "endosynth": [0, 1, 2, 5, 6],
-            "endovis2017": [0, 1, 2, 3, 7],
-            "endovis2018": [0, 1, 8],
+            "endovis2017": [0, 1, 2, 3, 4, 5, 6, 7],
+            "endovis2018": [0, 1, 2, 3, 8, 9],
             "endonerf": [0, 1, 6],
             "kidney3d": [0, 1, 2],
             "rirs-segc": [0, 1, 2],

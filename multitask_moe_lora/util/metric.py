@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from typing import Dict
+from typing import Dict, List, Optional
 
 
 class SegMetric:
@@ -9,7 +9,10 @@ class SegMetric:
     Compatible with SegmentationMetrics format
     """
 
-    def __init__(self, num_classes: int, device: str = 'cuda'):
+    def __init__(self,
+                 num_classes: int,
+                 device: str = 'cuda',
+                 valid_classes: Optional[List[int]] = None):
         """
         Initialize metrics calculator
 
@@ -19,6 +22,13 @@ class SegMetric:
         """
         self.num_classes = num_classes
         self.device = device
+        if valid_classes:
+            filtered = sorted({c for c in valid_classes if 0 <= c < num_classes})
+        else:
+            filtered = list(range(num_classes))
+        if not filtered:
+            filtered = list(range(num_classes))
+        self._valid_class_indices = filtered
         self.reset()
 
     def reset(self):
@@ -124,7 +134,7 @@ class SegMetric:
         
         metrics = {}
 
-        for class_index in range(self.num_classes):
+        for class_index in self._valid_class_indices:
             true_positives = confusion_matrix_float[class_index, class_index]
             false_positives = confusion_matrix_float[:, class_index].sum() - true_positives
             false_negatives = confusion_matrix_float[class_index, :].sum() - true_positives

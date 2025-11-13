@@ -5,6 +5,7 @@
 """
 
 import os
+import json
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -18,6 +19,7 @@ from typing import Dict, Any, Optional, List
 import math
 import statistics
 from collections import Counter
+from pathlib import Path
 import torch.distributed as dist
 
 from .config import TrainingConfig
@@ -25,6 +27,10 @@ from .loss import SiLogLoss
 from .metric import SegMetric, eval_depth
 from .data_utils import summarize_loader_composition
 from .palette import get_palette
+
+LS_SEG_CLASS_WHITELIST = [0, 1, 2, 3, 5, 6, 7, 8]
+NO_SEG_CLASS_WHITELIST = [0, 1, 2, 3, 4]
+COMBINED_SEG_CLASS_WHITELIST = sorted(set(LS_SEG_CLASS_WHITELIST + NO_SEG_CLASS_WHITELIST))
 # Try to import simple save helpers; fallback to legacy names if needed
 try:
     from .visualize import save_depth_prediction, save_seg_prediction
@@ -67,6 +73,26 @@ except Exception:
 
     def save_seg_prediction(*args, **kwargs):  # type: ignore
         return None
+
+
+def _persist_segmentation_metrics(save_path: Optional[str],
+                                  epoch: int,
+                                  metrics: Dict[str, Dict[str, float]],
+                                  logger: logging.Logger) -> None:
+    if not save_path or not metrics:
+        return
+    record = {
+        "epoch": int(epoch),
+        "metrics": metrics,
+    }
+    out_path = Path(save_path) / "segmentation_metrics.jsonl"
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+        logger.info("Saved per-dataset segmentation metrics to %s", out_path)
+    except OSError as exc:
+        logger.warning("Failed to write segmentation metrics to %s: %s", out_path, exc)
 
 
 class DepthValidator:
@@ -1062,7 +1088,7 @@ def validate_and_visualize(model: torch.nn.Module,
         seg_metrics = {
             "NO": SegMetric(config.num_classes),
             "LS": SegMetric(config.num_classes),
-            "combined": SegMetric(config.num_classes)
+            "combined": SegMetric(config.num_classes),
         }
 
     def _process_validation_batch(batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
@@ -1527,15 +1553,22 @@ def validate_and_visualize(model: torch.nn.Module,
 
         elif task_type == 'seg':
             # 计算指标
+            seg_metrics_payload: Dict[str, Dict[str, float]] = {}
             for name, metric_calc in seg_metrics.items():
                 seg_scores = metric_calc.get_scores()
                 all_metrics[name] = seg_scores
+                seg_metrics_payload[name] = {
+                    k: float(v)
+                    for k, v in seg_scores.items()
+                    if isinstance(v, (int, float)) and not (isinstance(v, float) and np.isnan(v))
+                }
                 display_name = name.upper() if name != 'combined' else name.capitalize()
                 logger.info(f"[{display_name}] Seg Validation Epoch {epoch} - mIoU: {seg_scores.get('miou', 0):.4f}, mDice: {seg_scores.get('mdice', 0):.4f}")
                 for k, v in seg_scores.items():
                     if isinstance(v, (int, float)) and not np.isnan(v):
                         writer.add_scalar(f'Metrics/Seg_{display_name}/{k}', v, epoch)
                 logger.info(f"    Overall Accuracy: {seg_scores.get('acc_overall', 0):.4f}, Mean IoU: {seg_scores.get('miou', 0):.4f}")
+            _persist_segmentation_metrics(config.save_path, epoch, seg_metrics_payload, logger)
 
             if tb_seg_samples and logger is not None:
                 logger.debug("[Validation] 分割样本已生成，按要求跳过 TensorBoard 记录。")
