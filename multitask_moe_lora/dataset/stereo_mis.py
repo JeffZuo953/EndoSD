@@ -14,7 +14,7 @@ from torchvision.transforms import Compose
 from .metadata.stereomis import StereoMISMetadata
 from .transform import NormalizeImage, PrepareForNet, Resize
 from .utils import compute_valid_mask
-from ..util.local_cache import LocalCacheManager
+from multitask_moe_lora.util.local_cache import LocalCacheManager
 
 logger = logging.getLogger(__name__)
 

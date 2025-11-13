@@ -10,11 +10,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CUDA_DEVICES="0"
 DATA_PROFILE="NO"
+BASE_DATA_PATH_CLI=""
 PASS_ARGS=()
 
 usage() {
     cat <<'EOF'
-Usage: bash train_mtlga.sh [--cuda DEVICES] [--profile LS|NO] [extra args...]
+Usage: bash train_mtlga.sh [--cuda DEVICES] [--profile LS|NO] [--base-path PATH] [extra args...]
 
 Adds GA loss automatically with weight=0.1 starting from epoch 15.
 Additional arguments are forwarded to train_lora.sh.
@@ -31,6 +32,11 @@ while [[ $# -gt 0 ]]; do
         --profile)
             [[ $# -ge 2 ]] || { echo "--profile requires LS or NO" >&2; exit 1; }
             DATA_PROFILE="$(echo "$2" | tr '[:lower:]' '[:upper:]')"
+            shift 2
+            ;;
+        --base-path)
+            [[ $# -ge 2 ]] || { echo "--base-path requires a path" >&2; exit 1; }
+            BASE_DATA_PATH_CLI="$2"
             shift 2
             ;;
         -h|--help)
@@ -58,9 +64,26 @@ case "${DATA_PROFILE}" in
         ;;
 esac
 
+# Resolve data root: CLI argument > environment > auto-detected default.
+if [[ -n "${BASE_DATA_PATH_CLI}" ]]; then
+    export BASE_DATA_PATH="${BASE_DATA_PATH_CLI}"
+elif [[ -z "${BASE_DATA_PATH:-}" ]]; then
+    if [[ -d "/mnt/DATA" ]]; then
+        export BASE_DATA_PATH="/mnt/DATA/ziyi/multitask"
+    else
+        export BASE_DATA_PATH="/data/ziyi/multitask"
+    fi
+fi
+
 if [[ -z "${NUM_GPUS:-}" ]]; then
     IFS=',' read -ra __cuda_list <<<"${CUDA_DEVICES}"
     NUM_GPUS=${#__cuda_list[@]}
+fi
+
+# Prefer user-provided PRETRAINED_WEIGHTS but fall back to shared checkpoint.
+DEFAULT_MTL_PRETRAINED="/home/ziyi/checkpoint_best_absrel_combined.pth"
+if [[ -z "${PRETRAINED_WEIGHTS:-}" && -f "${DEFAULT_MTL_PRETRAINED}" ]]; then
+    export PRETRAINED_WEIGHTS="${DEFAULT_MTL_PRETRAINED}"
 fi
 
 export CUDA_DEVICES

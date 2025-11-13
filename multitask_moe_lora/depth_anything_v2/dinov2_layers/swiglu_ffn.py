@@ -4,10 +4,13 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 from typing import Callable, Optional
 
 from torch import Tensor, nn
 import torch.nn.functional as F
+
+logger = logging.getLogger(__name__)
 
 
 class SwiGLUFFN(nn.Module):
@@ -37,7 +40,8 @@ try:
     from xformers.ops import SwiGLU
 
     XFORMERS_AVAILABLE = True
-except ImportError:
+except Exception as exc:  # pragma: no cover - only hits when xformers import fails
+    logger.warning("Falling back to PyTorch SwiGLU because xFormers import failed: %s", exc)
     SwiGLU = SwiGLUFFN
     XFORMERS_AVAILABLE = False
 
