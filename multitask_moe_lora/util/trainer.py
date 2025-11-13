@@ -878,6 +878,7 @@ class MultiTaskTrainer(BaseTrainer):
                         img_seg,
                         task=seg_task,
                         return_features=self._ga_loss_enabled,
+                        skip_depth_head=(seg_task == 'both'),
                         **token_kwargs,
                     )
                     pred_seg = outputs_seg['seg']
@@ -964,6 +965,7 @@ class MultiTaskTrainer(BaseTrainer):
                 img_depth,
                 task=model_task,
                 return_features=self._ga_loss_enabled,
+                skip_seg_head=(model_task == 'both'),
                 **token_kwargs,
             )
             pred_depth = outputs_depth['depth']
@@ -1211,6 +1213,7 @@ class MultiTaskTrainer(BaseTrainer):
                         input_img,
                         task=depth_task,
                         return_features=self._ga_loss_enabled,
+                        skip_seg_head=(depth_task == 'both'),
                         **token_kwargs,
                     )
                     depth_pred = outputs['depth']
@@ -1255,6 +1258,7 @@ class MultiTaskTrainer(BaseTrainer):
                         input_img,
                         task=seg_task,
                         return_features=self._ga_loss_enabled,
+                        skip_depth_head=(seg_task == 'both'),
                         **token_kwargs,
                     )
                     seg_pred = outputs['seg']

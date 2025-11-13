@@ -380,7 +380,15 @@ class DepthAnythingV2_MultiTask(nn.Module):
         seg_pred = self.seg_head(reshaped_features)
         return seg_pred
 
-    def forward(self, x, task='both', return_features=False, semantic_token_ids: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        x,
+        task: str = 'both',
+        return_features: bool = False,
+        semantic_token_ids: Optional[torch.Tensor] = None,
+        skip_depth_head: bool = False,
+        skip_seg_head: bool = False,
+    ):
         """
         前向传播
 
@@ -402,7 +410,10 @@ class DepthAnythingV2_MultiTask(nn.Module):
 
         results = {}
 
-        if task in ['depth', 'both']:
+        run_depth = task in ['depth', 'both']
+        run_seg = task in ['seg', 'both'] and self.seg_head is not None
+
+        if run_depth and not skip_depth_head:
             # 深度预测 - 使用depth专用features
             depth_features = feature_results['depth_features']
             patch_size = self.get_patch_size()
@@ -435,7 +446,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
                 intrinsics[:, 2, 2] = 1.0
                 results['camera_intrinsics'] = intrinsics
 
-        if task in ['seg', 'both'] and self.seg_head is not None:
+        if run_seg and not skip_seg_head:
             # 分割预测 - 使用seg专用features
             seg_features = feature_results['seg_features']
             seg_raw_features = self.forward_segmentation(seg_features, h, w)
