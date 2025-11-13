@@ -33,7 +33,7 @@ SAVE_INTERVAL=${SAVE_INTERVAL:-5}
 FROZEN_BACKBONE="ture"
 USE_MIXED_PRECISION=true  # disabled for stability.
 
-# Mode: original | lora-only | legacy-lora | endo-unid | mtlora | mtlga
+# Mode: original | lora-only | legacy-lora | mtlora | mtlga
 MODE="lora-only"
 LORA_R=4
 LORA_ALPHA=8
@@ -92,7 +92,7 @@ echo "  Image Size:          ${IMG_SIZE}"
 echo "  Frozen Backbone:     ${FROZEN_BACKBONE}"
 echo "  --- PEFT Mode ---"
 echo "  Mode:                ${MODE}"
-if [[ "${MODE}" == "lora-only" || "${MODE}" == "legacy-lora" || "${MODE}" == "endo-unid" || "${MODE}" == "mtlora" || "${MODE}" == "mtlga" ]]; then
+if [[ "${MODE}" == "lora-only" || "${MODE}" == "legacy-lora" || "${MODE}" == "mtlora" || "${MODE}" == "mtlga" ]]; then
     echo "  LoRA Rank (r):       ${LORA_R}"
     echo "  LoRA Alpha:          ${LORA_ALPHA}"
 fi

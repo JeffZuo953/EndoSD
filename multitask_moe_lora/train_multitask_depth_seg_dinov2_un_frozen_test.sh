@@ -28,7 +28,7 @@ WEIGHT_DECAY=0.01
 IMG_SIZE=518
 FROZEN_BACKBONE="true" # Backbone weights frozen for stability
 
-# Training mode parameters (supports: original, lora-only, legacy-lora, endo-unid, mtlora, mtlga)
+# Training mode parameters (supports: original, lora-only, legacy-lora, mtlora, mtlga)
 MODE="original"
 
 # Parameters effective only in LoRA-based modes
@@ -99,7 +99,7 @@ echo "  Image Size:          ${IMG_SIZE}"
 echo "  Frozen Backbone:     ${FROZEN_BACKBONE}"
 echo "  --- PEFT Mode ---"
 echo "  Mode:                ${MODE}"
-if [[ "${MODE}" == "lora-only" || "${MODE}" == "legacy-lora" || "${MODE}" == "endo-unid" || "${MODE}" == "mtlora" || "${MODE}" == "mtlga" ]]; then
+if [[ "${MODE}" == "lora-only" || "${MODE}" == "legacy-lora" || "${MODE}" == "mtlora" || "${MODE}" == "mtlga" ]]; then
     echo "  LoRA Rank (r):       ${LORA_R}"
     echo "  LoRA Alpha:          ${LORA_ALPHA}"
 fi

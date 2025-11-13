@@ -29,7 +29,7 @@ class TrainingConfig:
     camera_head_loss_scale: float = 1.0
 
     # 模式选择参数
-    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "endo-unid", "mtlora", "mtlga", "mtoat", "endounid"
+    mode: str = "original"  # 可选择: "original", "lora-only", "legacy-lora", "mtlora", "mtlga", "mtoat", "endounid"
 
     # LoRA 参数
     use_lora: bool = False  # 由mode参数自动设置
@@ -37,18 +37,6 @@ class TrainingConfig:
     lora_alpha: int = 1
     use_semantic_tokens: bool = False
     semantic_token_count: int = 0
-
-    # EndoUniD 专用参数
-    endo_unid_shared_shards: int = 1
-    endo_unid_shared_r: int = 4
-    endo_unid_shared_alpha: int = 8
-    endo_unid_depth_r: int = 8
-    endo_unid_depth_alpha: int = 16
-    endo_unid_seg_r: int = 8
-    endo_unid_seg_alpha: int = 16
-    endo_unid_camera_r: int = 4
-    endo_unid_camera_alpha: int = 8
-    endo_unid_dropout: float = 0.0
 
     # MoE 参数
     use_moe: bool = False  # 由mode参数自动设置
@@ -151,35 +139,13 @@ def create_parser() -> argparse.ArgumentParser:
     # 模式选择和PEFT参数
     parser.add_argument("--mode",
                         default="original",
-                        choices=["original", "lora-only", "legacy-lora", "endo-unid", "mtlora", "mtlga", "mtoat", "endounid"],
-                        help="Training mode: original, lora-only, legacy-lora (attention-only LoRA), endo-unid, mtlora (shared+task LoRA), mtoat (mtlora + adaptive tokens), mtlga (mtlora + Gram loss), or endounid (mtlga + adaptive tokens)")
+                        choices=["original", "lora-only", "legacy-lora", "mtlora", "mtlga", "mtoat", "endounid"],
+                        help="Training mode: original, lora-only, legacy-lora (attention-only LoRA), mtlora (shared+task LoRA), mtoat (mtlora + adaptive tokens), mtlga (mtlora + Gram loss), or endounid (mtlga + adaptive tokens)")
 
     parser.add_argument("--lora-r", default=4, type=int, help="LoRA rank (r)")
     parser.add_argument("--lora-alpha", default=8, type=int, help="LoRA alpha")
     parser.add_argument("--semantic-token-count", default=0, type=int,
                         help="Number of adaptive semantic tokens (ignored unless mode requires them)")
-
-    # EndoUniD specific knobs
-    parser.add_argument("--endo-unid-shared-shards", default=2, type=int,
-                        help="Number of shards for shared adapters in EndoUniD mode")
-    parser.add_argument("--endo-unid-shared-r", default=4, type=int,
-                        help="Shared adapter rank for EndoUniD")
-    parser.add_argument("--endo-unid-shared-alpha", default=8, type=int,
-                        help="Shared adapter alpha for EndoUniD")
-    parser.add_argument("--endo-unid-depth-r", default=8, type=int,
-                        help="Depth-only adapter rank for EndoUniD")
-    parser.add_argument("--endo-unid-depth-alpha", default=16, type=int,
-                        help="Depth-only adapter alpha for EndoUniD")
-    parser.add_argument("--endo-unid-seg-r", default=8, type=int,
-                        help="Seg-only adapter rank for EndoUniD")
-    parser.add_argument("--endo-unid-seg-alpha", default=16, type=int,
-                        help="Seg-only adapter alpha for EndoUniD")
-    parser.add_argument("--endo-unid-camera-r", default=4, type=int,
-                        help="Camera-head adapter rank for EndoUniD")
-    parser.add_argument("--endo-unid-camera-alpha", default=8, type=int,
-                        help="Camera-head adapter alpha for EndoUniD")
-    parser.add_argument("--endo-unid-dropout", default=0.0, type=float,
-                        help="Adapter dropout for EndoUniD LoRA")
 
     parser.add_argument("--num-experts", default=8, type=int, help="Number of experts in MoE")
     parser.add_argument("--top-k", default=2, type=int, help="Number of experts to use for each token")
@@ -280,7 +246,7 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
 
     # 根据mode参数设置use_lora（MoE 模式已移除）
     mode = getattr(args, 'mode', 'original')
-    if mode in ('endo-unid', 'lora-only', 'legacy-lora', 'mtlora', 'mtlga', 'mtoat', 'endounid'):
+    if mode in ('lora-only', 'legacy-lora', 'mtlora', 'mtlga', 'mtoat', 'endounid'):
         use_lora = True
     else:
         use_lora = False
@@ -365,16 +331,7 @@ def args_to_config(args: argparse.Namespace) -> TrainingConfig:
                           port=getattr(args, 'port', None),
                           mixed_precision=getattr(args, 'mixed_precision', False),
                           dinov3_repo_path=getattr(args, 'dinov3_repo_path', "/media/ExtHDD1/jianfu/depth/DepthAnythingV2/dinov3"),
-                          endo_unid_shared_shards=getattr(args, 'endo_unid_shared_shards', 1),
-                          endo_unid_shared_r=getattr(args, 'endo_unid_shared_r', 4),
-                          endo_unid_shared_alpha=getattr(args, 'endo_unid_shared_alpha', 8),
-                          endo_unid_depth_r=getattr(args, 'endo_unid_depth_r', 8),
-                          endo_unid_depth_alpha=getattr(args, 'endo_unid_depth_alpha', 16),
-                          endo_unid_seg_r=getattr(args, 'endo_unid_seg_r', 8),
-                          endo_unid_seg_alpha=getattr(args, 'endo_unid_seg_alpha', 16),
-                          endo_unid_camera_r=getattr(args, 'endo_unid_camera_r', 4),
-                          endo_unid_camera_alpha=getattr(args, 'endo_unid_camera_alpha', 8),
-                          endo_unid_dropout=getattr(args, 'endo_unid_dropout', 0.0))
+                         )
 
 
 def validate_config(config: TrainingConfig) -> List[str]:
@@ -449,21 +406,6 @@ def validate_config(config: TrainingConfig) -> List[str]:
         errors.append("semantic_token_count must be >= 0")
     if config.use_semantic_tokens and config.semantic_token_count == 0:
         errors.append("semantic_token_count must be > 0 when semantic tokens are enabled")
-
-    # EndoUniD checks
-    if config.mode == "endo-unid":
-        if config.encoder not in {"vits", "vitb"}:
-            errors.append("EndoUniD mode currently only supports vits or vitb encoders")
-        if config.endo_unid_shared_shards <= 0:
-            errors.append("endo_unid_shared_shards must be positive")
-        for label, rank in [("shared", config.endo_unid_shared_r),
-                            ("depth", config.endo_unid_depth_r),
-                            ("seg", config.endo_unid_seg_r),
-                            ("camera", config.endo_unid_camera_r)]:
-            if rank < 0:
-                errors.append(f"EndoUniD {label} rank must be non-negative")
-        if config.endo_unid_dropout < 0 or config.endo_unid_dropout > 1:
-            errors.append("endo_unid_dropout must be within [0, 1]")
 
     return errors
 

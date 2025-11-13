@@ -107,8 +107,12 @@ IMG_SIZE=${IMG_SIZE:-518}
 SAVE_INTERVAL=${SAVE_INTERVAL:-5}
 USE_MIXED_PRECISION=${USE_MIXED_PRECISION:-true}
 FROZEN_BACKBONE=${FROZEN_BACKBONE:-false}
+TRAIN_SAMPLE_STEP=${TRAIN_SAMPLE_STEP:-1}
+VAL_SAMPLE_STEP=${VAL_SAMPLE_STEP:-1}
+VAL_MIN_SAMPLES_PER_DATASET=${VAL_MIN_SAMPLES_PER_DATASET:-0}
+MAX_SAMPLES_PER_DATASET=${MAX_SAMPLES_PER_DATASET:-}
 
-# Mode selection: original | lora-only | legacy-lora | endo-unid | mtlora | mtlga | mtoat | endounid
+# Mode selection: original | lora-only | legacy-lora | mtlora | mtlga | mtoat | endounid
 MODE=${MODE:-"legacy-lora"}
 
 # Dataset profile: ENDO (EndoSynth-only), NO (multi-domain no_bundle), LS (ls_bundle)
@@ -160,18 +164,6 @@ NUM_CLASSES=${NUM_CLASSES:-${PROFILE_NUM_CLASSES}}
 GA_LOSS_WEIGHT=${GA_LOSS_WEIGHT:-0.02}
 GA_LOSS_START_EPOCH=${GA_LOSS_START_EPOCH:-50}
 
-# EndoUniD adapter defaults
-ENDO_SHARED_SHARDS=${ENDO_SHARED_SHARDS:-2}
-ENDO_SHARED_R=${ENDO_SHARED_R:-4}
-ENDO_SHARED_ALPHA=${ENDO_SHARED_ALPHA:-8}
-ENDO_DEPTH_R=${ENDO_DEPTH_R:-8}
-ENDO_DEPTH_ALPHA=${ENDO_DEPTH_ALPHA:-16}
-ENDO_SEG_R=${ENDO_SEG_R:-8}
-ENDO_SEG_ALPHA=${ENDO_SEG_ALPHA:-16}
-ENDO_CAMERA_R=${ENDO_CAMERA_R:-4}
-ENDO_CAMERA_ALPHA=${ENDO_CAMERA_ALPHA:-8}
-ENDO_DROPOUT=${ENDO_DROPOUT:-0.0}
-
 EXTRA_MODE_ARGS=()
 case "${MODE}" in
     original)
@@ -190,20 +182,6 @@ case "${MODE}" in
             export SEMANTIC_TOKEN_COUNT="${SEM_TOKENS}"
             EXTRA_MODE_ARGS+=(--semantic-token-count "${SEMANTIC_TOKEN_COUNT}")
         fi
-        ;;
-    endo-unid)
-        EXTRA_MODE_ARGS+=(
-            --endo-unid-shared-shards "${ENDO_SHARED_SHARDS}"
-            --endo-unid-shared-r "${ENDO_SHARED_R}"
-            --endo-unid-shared-alpha "${ENDO_SHARED_ALPHA}"
-            --endo-unid-depth-r "${ENDO_DEPTH_R}"
-            --endo-unid-depth-alpha "${ENDO_DEPTH_ALPHA}"
-            --endo-unid-seg-r "${ENDO_SEG_R}"
-            --endo-unid-seg-alpha "${ENDO_SEG_ALPHA}"
-            --endo-unid-camera-r "${ENDO_CAMERA_R}"
-            --endo-unid-camera-alpha "${ENDO_CAMERA_ALPHA}"
-            --endo-unid-dropout "${ENDO_DROPOUT}"
-        )
         ;;
     *)
         echo "Unsupported MODE='${MODE}'."
@@ -284,6 +262,9 @@ TRAIN_CMD=(
     --weight-decay "${WEIGHT_DECAY}"
     --img-size "${IMG_SIZE}"
     --save-interval "${SAVE_INTERVAL}"
+    --train-sample-step "${TRAIN_SAMPLE_STEP}"
+    --val-sample-step "${VAL_SAMPLE_STEP}"
+    --val-min-samples-per-dataset "${VAL_MIN_SAMPLES_PER_DATASET}"
     --mode "${MODE}"
     --dataset-config-name "${DATASET_CONFIG_NAME}"
     --path-transform-name "${PATH_TRANSFORM_NAME}"
@@ -310,6 +291,9 @@ if [[ -n "${PRETRAINED_WEIGHTS}" ]]; then
 fi
 if [[ -n "${RESUME_CHECKPOINT}" ]]; then
     TRAIN_CMD+=(--resume-from "${RESUME_CHECKPOINT}" --resume-full-state)
+fi
+if [[ -n "${MAX_SAMPLES_PER_DATASET}" ]]; then
+    TRAIN_CMD+=(--max-samples-per-dataset "${MAX_SAMPLES_PER_DATASET}")
 fi
 
 TRAIN_CMD+=("${EXTRA_MODE_ARGS[@]}")

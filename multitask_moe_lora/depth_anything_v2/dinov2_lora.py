@@ -82,7 +82,7 @@ class DinoVisionTransformer_LoRA(nn.Module):
         lora_alpha: int = None,
         lora_dropout: float = 0.0,
         lora_bias: str = 'none',
-        endo_unid_cfg: Optional[dict] = None,
+        adapter_scope_cfg: Optional[dict] = None,
         **kwargs
     ):
         """
@@ -117,7 +117,7 @@ class DinoVisionTransformer_LoRA(nn.Module):
         # 根据mode参数解码配置项
         attention_only_lora = mode == 'legacy-lora'
 
-        if mode in ('endo-unid', 'mtlora', 'mtlga'):
+        if mode in ('mtlora', 'mtlga', 'mtoat', 'endounid'):
             use_lora = True
             lora_r = 0  # ranks handled per scope
             lora_alpha = 1
@@ -135,14 +135,14 @@ class DinoVisionTransformer_LoRA(nn.Module):
 
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.mode = mode
-        self.is_endo_unid = mode in {'endo-unid', 'mtlora', 'mtlga'}
+        self.uses_adapter_scopes = mode in {'mtlora', 'mtlga', 'mtoat', 'endounid'}
         self.use_lora = use_lora
         self.attention_only_lora = attention_only_lora
-        self.endo_unid_cfg = endo_unid_cfg if self.is_endo_unid else None
-        if self.is_endo_unid:
-            if self.endo_unid_cfg is None:
-                raise ValueError("EndoUniD mode requires endo_unid_cfg dictionary")
-            self.adapter_controller = AdapterScopeController(default=self.endo_unid_cfg.get('default_scopes', ['shared']))
+        self.adapter_scope_cfg = adapter_scope_cfg if self.uses_adapter_scopes else None
+        if self.uses_adapter_scopes:
+            if self.adapter_scope_cfg is None:
+                raise ValueError("Adapter-scoped modes require adapter_scope_cfg dictionary")
+            self.adapter_controller = AdapterScopeController(default=self.adapter_scope_cfg.get('default_scopes', ['shared']))
 
         self.num_tokens = 1
         self.n_blocks = depth
@@ -161,6 +161,8 @@ class DinoVisionTransformer_LoRA(nn.Module):
         self.register_tokens = (
             nn.Parameter(torch.zeros(1, num_register_tokens, embed_dim)) if num_register_tokens else None
         )
+        if self.use_lora:
+            self.cls_token.requires_grad_(False)
 
         if drop_path_uniform is True:
             dpr = [drop_path_rate] * depth
@@ -205,9 +207,9 @@ class DinoVisionTransformer_LoRA(nn.Module):
         # Pass LoRA params to block_fn constructor，扩展为支持MoE参数
         blocks_list = []
         for i in range(depth):
-            if self.is_endo_unid:
-                block_scopes = self.endo_unid_cfg['block_scopes'].get(i, ['shared'])
-                scope_specs = self._build_endo_scope_specs(block_scopes)
+            if self.uses_adapter_scopes:
+                block_scopes = self.adapter_scope_cfg['block_scopes'].get(i, ['shared'])
+                scope_specs = self._build_adapter_scope_specs(block_scopes)
                 block_kwargs = {
                     'dim': embed_dim,
                     'num_heads': num_heads,
@@ -220,8 +222,8 @@ class DinoVisionTransformer_LoRA(nn.Module):
                     'act_layer': act_layer,
                     'scope_controller': self.adapter_controller,
                     'scope_specs': scope_specs,
-                    'shared_shards': self.endo_unid_cfg.get('shared_shards', 1),
-                    'dropout': self.endo_unid_cfg.get('dropout', 0.0),
+                    'shared_shards': self.adapter_scope_cfg.get('shared_shards', 1),
+                    'dropout': self.adapter_scope_cfg.get('dropout', 0.0),
                     'init_values': init_values,
                 }
                 blocks_list.append(EndoUniDBlock(**block_kwargs))
@@ -266,11 +268,11 @@ class DinoVisionTransformer_LoRA(nn.Module):
         self.init_weights()
 
         # Apply LoRA parameter freezing logic
-        if lora_r > 0 or self.is_endo_unid:
+        if lora_r > 0 or self.uses_adapter_scopes:
             mark_only_lora_as_trainable(self, bias=lora_bias)
 
-    def _build_endo_scope_specs(self, scopes: Sequence[str]) -> Dict[str, Dict[str, int]]:
-        cfg = self.endo_unid_cfg or {}
+    def _build_adapter_scope_specs(self, scopes: Sequence[str]) -> Dict[str, Dict[str, int]]:
+        cfg = self.adapter_scope_cfg or {}
         rank_table = cfg.get('ranks', {})
         alpha_table = cfg.get('alphas', {})
         specs = {}

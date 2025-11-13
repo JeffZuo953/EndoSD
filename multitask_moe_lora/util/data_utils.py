@@ -8,12 +8,13 @@ import os
 import logging
 import math
 import copy
+import json
 from bisect import bisect_right
 from collections import defaultdict
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset as TorchDataset, Subset
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from torch.utils.data import ConcatDataset
 
 from ..dataset.cache_utils import DepthCacheDataset, SegCacheDataset
@@ -35,6 +36,94 @@ _HOME_SSD_PREFIXES = tuple({
     os.path.abspath(os.path.expanduser(os.path.expandvars(prefix)))
     for prefix in (_RAW_HOME_SSD_PREFIXES + (HOME_SSD_PATH,))
 })
+
+
+_SEMANTIC_TOKEN_INDEX_MAP_CACHE: Optional[Dict[str, Union[List[int], Dict[str, List[int]]]]] = None
+
+
+def _load_semantic_token_index_map() -> Dict[str, Union[List[int], Dict[str, List[int]]]]:
+    """
+    Load dataset -> semantic token index mapping from environment or defaults.
+    Environment variable SEMANTIC_TOKEN_INDEX_MAP should be JSON like:
+        {"EndoVis2017":[0,1], "Kidney3D":[2,3,4]}
+    """
+    global _SEMANTIC_TOKEN_INDEX_MAP_CACHE
+    if _SEMANTIC_TOKEN_INDEX_MAP_CACHE is not None:
+        return _SEMANTIC_TOKEN_INDEX_MAP_CACHE
+
+    mapping: Dict[str, Union[List[int], Dict[str, List[int]]]] = {}
+    env_value = os.environ.get("SEMANTIC_TOKEN_INDEX_MAP")
+    if env_value:
+        try:
+            parsed = json.loads(env_value)
+            if isinstance(parsed, dict):
+                for key, value in parsed.items():
+                    if not isinstance(value, (list, tuple)):
+                        continue
+                    try:
+                        mapping[key.strip().lower()] = [int(v) for v in value]
+                    except (TypeError, ValueError):
+                        continue
+        except json.JSONDecodeError:
+            logging.warning("Failed to parse SEMANTIC_TOKEN_INDEX_MAP; using defaults.")
+
+    if not mapping:
+        mapping = {
+            "endosynth": [0, 1, 2, 5, 6],
+            "endovis2017": [0, 1, 2, 3, 7],
+            "endovis2018": [0, 1, 8],
+            "endonerf": [0, 1, 6],
+            "kidney3d": [0, 1, 2],
+            "rirs-segc": [0, 1, 2],
+            "rirs-segp": [0, 1],
+            "bkai-igh-neopolyp": [0, 3],
+            "clinicdb": [0, 3],
+            "cvc-endoscene": [0, 3],
+            "kvasir-seg": [0, 3],
+            "etis-laribpolypdb": [0, 3],
+            "syntheticpolyp": {
+                "default": [4],
+                "vid40": [4],
+                "vid41": [5],
+                "vid42": [6],
+                "vid43": [7],
+                "vid44": [8],
+                "vid45": [9],
+                "vid46": [10],
+                "vid47": [11],
+            },
+        }
+
+    _SEMANTIC_TOKEN_INDEX_MAP_CACHE = mapping
+    return mapping
+
+
+def _lookup_dataset_token_ids(dataset_name: Optional[str], clip_id: Optional[str]) -> List[int]:
+    if not dataset_name:
+        return []
+    key = dataset_name.strip().lower()
+    mapping = _load_semantic_token_index_map()
+    value = mapping.get(key)
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        clip_key = clip_id.strip().lower() if clip_id else None
+        if clip_key and clip_key in value:
+            return list(value[clip_key])
+        default = value.get("default")
+        return list(default) if default else []
+    return list(value)
+
+
+def _build_batch_token_id_list(dataset_names: List[Optional[str]],
+                               clip_ids: List[Optional[str]],
+                               batch_size: int) -> List[List[int]]:
+    tokens: List[List[int]] = []
+    for idx in range(batch_size):
+        name = dataset_names[idx] if idx < len(dataset_names) else None
+        clip = clip_ids[idx] if idx < len(clip_ids) else None
+        tokens.append(_lookup_dataset_token_ids(name, clip))
+    return tokens
 
 
 def _rewrite_path(path: str) -> str:
@@ -126,7 +215,7 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     if max_w % stride != 0:
         max_w = max_w + (stride - max_w % stride)
 
-    images, depths, masks, max_depths, source_types, dataset_names = [], [], [], [], [], []
+    images, depths, masks, max_depths, source_types, dataset_names, clip_ids = [], [], [], [], [], [], []
     valid_masks, depth_valid_masks, seg_valid_masks = [], [], []
     camera_intrinsics: List[Optional[torch.Tensor]] = []
     camera_intrinsics_mask: List[bool] = []
@@ -156,8 +245,8 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
         # 记录数据源类型
         if "source_type" in item:
             source_types.append(item["source_type"])
-        if "dataset_name" in item:
-            dataset_names.append(item["dataset_name"])
+        dataset_names.append(item.get("dataset_name"))
+        clip_ids.append(item.get("clip_id"))
 
         # 填充深度（如果存在）
         if "depth" in item:
@@ -235,10 +324,11 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     result = {"image": torch.stack(images)}
 
-    if source_types:
+    if any(st is not None for st in source_types):
         result["source_type"] = source_types
-    if dataset_names:
+    if any(name is not None for name in dataset_names):
         result["dataset_name"] = dataset_names
+    result["token_ids"] = _build_batch_token_id_list(dataset_names, clip_ids, len(images))
 
     if depths:
         depth_tensor = torch.stack(depths)
@@ -321,8 +411,7 @@ def _make_collate_fn(stride: int):
 
             if "source_type" in item:
                 source_types.append(item["source_type"])
-            if "dataset_name" in item:
-                dataset_names.append(item["dataset_name"])
+            dataset_names.append(item.get("dataset_name"))
 
             if "depth" in item:
                 depth = item["depth"]
@@ -387,10 +476,11 @@ def _make_collate_fn(stride: int):
                 camera_sizes_mask.append(False)
 
         result = {"image": torch.stack(images)}
-        if source_types:
+        if any(st is not None for st in source_types):
             result["source_type"] = source_types
-        if dataset_names:
+        if any(name is not None for name in dataset_names):
             result["dataset_name"] = dataset_names
+        result["token_ids"] = _build_batch_token_id_list(dataset_names, clip_ids, len(images))
         if depths:
             depth_tensor = torch.stack(depths)
             if depth_tensor.dim() == 3:

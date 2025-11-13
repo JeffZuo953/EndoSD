@@ -63,7 +63,7 @@ class EndoNeRFDataset(Dataset):
         self.root_dir = dataset_root
         self.seg_root = dataset_root.parent / "EndoNeRF_seg"
         if not self.seg_root.exists():
-            raise FileNotFoundError(f"Segmentation root not found: {self.seg_root}")
+            logger.warning("Segmentation root not found at %s; falling back to per-sequence directories", self.seg_root)
 
         self.size = size
         self.max_depth = max_depth
@@ -88,15 +88,21 @@ class EndoNeRFDataset(Dataset):
             ]
         )
 
-    def _resolve_segmentation_path(self, sequence: str) -> Path:
+    def _resolve_segmentation_path(self, sequence_dir: Path) -> Path:
+        sequence = sequence_dir.name
         candidates = [
             self.seg_root / sequence / "mask_label_1_6",
             self.seg_root / sequence,
+            sequence_dir / "gt_masks",
+            sequence_dir / "mask_label_1_6",
         ]
         for candidate in candidates:
             if candidate.exists():
                 return candidate
-        raise FileNotFoundError(f"Segmentation directory not found for sequence '{sequence}' under {self.seg_root}")
+        raise FileNotFoundError(
+            f"Segmentation directory not found for sequence '{sequence}'. "
+            f"Checked: {', '.join(str(c) for c in candidates)}"
+        )
 
     def _gather_samples(self, filelist_path: str | Path | None) -> List[_EndoNeRFSample]:
         allowed_images: set[str] | None = None
@@ -110,7 +116,7 @@ class EndoNeRFDataset(Dataset):
 
             image_dir = sequence_dir / "images"
             depth_dir = sequence_dir / "depth"
-            seg_dir = self._resolve_segmentation_path(sequence_dir.name)
+            seg_dir = self._resolve_segmentation_path(sequence_dir)
             depth_valid_dir = sequence_dir / "masks"
 
             if not (image_dir.exists() and depth_dir.exists() and depth_valid_dir.exists()):
@@ -210,10 +216,18 @@ class EndoNeRFDataset(Dataset):
                     ]
                 )
 
+        # Add ".mask" variants commonly used by raw LS data
+        mask_augmented: List[str] = []
+        for name in candidates:
+            mask_augmented.append(name)
+            if name.endswith(".png"):
+                base = name[: -len(".png")]
+                mask_augmented.append(f"{base}.mask.png")
+
         # Deduplicate while preserving order
         seen = set()
         unique = []
-        for name in candidates:
+        for name in mask_augmented:
             if name not in seen:
                 unique.append(name)
                 seen.add(name)

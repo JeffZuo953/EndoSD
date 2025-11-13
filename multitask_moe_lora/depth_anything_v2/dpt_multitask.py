@@ -37,13 +37,13 @@ class DepthAnythingV2_MultiTask(nn.Module):
                  seg_head_type='linear',
                  dinov3_repo_path='/media/ExtHDD1/jianfu/depth/DepthAnythingV2/dinov3',
                  pretrained_weights_path='',
-                 mode='original',  # 可选择: "original", "lora-only", "legacy-lora", "endo-unid"
+                 mode='original',  # 可选择: "original", "lora-only", "legacy-lora"
                  num_experts: int = 8,
                  top_k: int = 2,
                  lora_r: int = 4,
                  lora_alpha: int = 8,
                  camera_head_mode: str = "none",
-                 endo_unid_params: Optional[dict] = None,
+                 adapter_scope_params: Optional[dict] = None,
                  use_semantic_tokens: bool = False,
                  semantic_token_count: int = 0):
         super(DepthAnythingV2_MultiTask, self).__init__()
@@ -56,16 +56,16 @@ class DepthAnythingV2_MultiTask(nn.Module):
         self.seg_head_type = (seg_head_type or "linear").lower()
         self.mode = mode
         self.camera_head_mode = camera_head_mode.lower()
-        self.endo_unid_params = endo_unid_params or {}
-        scoped_modes = {"endo-unid", "mtlora", "mtlga", "mtoat", "endounid"}
-        self.endo_unid_enabled = self.mode in scoped_modes
+        self.adapter_scope_params = adapter_scope_params or {}
+        scoped_modes = {"mtlora", "mtlga", "mtoat", "endounid"}
+        self.adapter_scopes_enabled = self.mode in scoped_modes
         if self.mode in {"mtlora", "mtlga"} and "dinov3" in self.encoder:
             raise ValueError(f"Mode '{self.mode}' currently supports DINOv2 backbones only.")
-        if self.endo_unid_enabled and self.encoder not in {"vits", "vitb"}:
-            raise ValueError("EndoUniD mode currently only supports vits or vitb encoders")
+        if self.adapter_scopes_enabled and self.encoder not in {"vits", "vitb"}:
+            raise ValueError("Adapter-scoped modes currently only support vits or vitb encoders")
 
         # 根据mode参数解耦为内部参数
-        self.use_lora = mode in ['lora-only', 'legacy-lora', 'endo-unid', 'mtlora', 'mtlga', 'mtoat', 'endounid']
+        self.use_lora = mode in ['lora-only', 'legacy-lora', 'mtlora', 'mtlga', 'mtoat', 'endounid']
         self.use_moe = False
         self.attention_only_lora = mode == 'legacy-lora'
         self.freeze_camera_backbone_grad = self.mode in {'mtlora', 'mtlga', 'mtoat', 'endounid'}
@@ -126,15 +126,20 @@ class DepthAnythingV2_MultiTask(nn.Module):
             else:
                 raise ValueError(f"Unknown seg_input_type: {self.seg_input_type}")
 
-            if self.seg_head_type not in {"linear", "sf"}:
-                raise ValueError(f"Unsupported seg_head_type: {self.seg_head_type}")
-            # 新的语义头共享与深度头相同的层索引，便于特征对齐
-            self.seg_layer_idx = self.depth_layer_idx[self.encoder]
+        if self.seg_head_type not in {"linear", "sf"}:
+            raise ValueError(f"Unsupported seg_head_type: {self.seg_head_type}")
+        # 新的语义头共享与深度头相同的层索引，便于特征对齐
+        self.seg_layer_idx = self.depth_layer_idx[self.encoder]
 
-        if self.endo_unid_enabled:
-            self.endo_unid_cfg = self._build_endo_unid_cfg()
+        if self.use_semantic_tokens:
+            desired_token_count = max(len(self.seg_layer_idx) - 1, 1)
+            current = self.semantic_token_count if self.semantic_token_count and self.semantic_token_count > 0 else desired_token_count
+            self.semantic_token_count = max(current, desired_token_count)
+
+        if self.adapter_scopes_enabled:
+            self.adapter_scope_cfg = self._build_adapter_scope_cfg()
         else:
-            self.endo_unid_cfg = None
+            self.adapter_scope_cfg = None
 
         # Patch size 配置
         self.patch_sizes = {
@@ -204,20 +209,19 @@ class DepthAnythingV2_MultiTask(nn.Module):
                     mode=mode,  # 传递mode而不是单独的flag
                     lora_r=lora_r,
                     lora_alpha=lora_alpha,
-                    endo_unid_cfg=self.endo_unid_cfg,
+                    adapter_scope_cfg=self.adapter_scope_cfg,
                 )
 
+        self.scenario_token: Optional[torch.nn.Parameter] = None
+        self.semantic_token_bank: Optional[torch.nn.Parameter] = None
         if self.use_semantic_tokens:
             if 'dinov3' in self.encoder:
                 raise ValueError("Semantic tokens currently only support DINOv2 backbones.")
             embed_dim = self.backbone.embed_dim
-            self.global_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-            nn.init.normal_(self.global_token, std=1e-2)
+            self.scenario_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+            nn.init.normal_(self.scenario_token, std=1e-2)
             self.semantic_token_bank = nn.Parameter(torch.zeros(self.semantic_token_count, embed_dim))
             nn.init.normal_(self.semantic_token_bank, std=1e-2)
-        else:
-            self.global_token = None
-            self.semantic_token_bank = None
         # 深度估计头
         patch_size = self.get_patch_size()
         self.depth_head = DPTHead(self.backbone.embed_dim, features, use_bn, out_channels=out_channels, use_clstoken=use_clstoken, patch_size=patch_size)
@@ -232,10 +236,10 @@ class DepthAnythingV2_MultiTask(nn.Module):
             else:
                 self.seg_head = SegFormerHead(in_channels=seg_in_channels, embedding_dim=features, num_classes=num_classes, align_corners=False)
 
-        scoped_camera_enabled = self.endo_unid_enabled
-        camera_adapter_rank = self.endo_unid_params.get('camera_r', 0) if scoped_camera_enabled else 0
-        camera_adapter_alpha = self.endo_unid_params.get('camera_alpha', 1) if scoped_camera_enabled else 1
-        camera_adapter_dropout = self.endo_unid_params.get('dropout', 0.0) if scoped_camera_enabled else 0.0
+        scoped_camera_enabled = self.adapter_scopes_enabled
+        camera_adapter_rank = self.adapter_scope_params.get('camera_r', 0) if scoped_camera_enabled else 0
+        camera_adapter_alpha = self.adapter_scope_params.get('camera_alpha', 1) if scoped_camera_enabled else 1
+        camera_adapter_dropout = self.adapter_scope_params.get('dropout', 0.0) if scoped_camera_enabled else 0.0
 
         # Optional camera head
         if self.camera_head_mode == "simple":
@@ -273,32 +277,27 @@ class DepthAnythingV2_MultiTask(nn.Module):
                             batch_size: int,
                             semantic_token_ids: Optional[torch.Tensor],
                             device: torch.device) -> Optional[torch.Tensor]:
-        if not self.use_semantic_tokens or self.semantic_token_bank is None:
+        self._current_extra_token_count = 0
+        if (not self.use_semantic_tokens or
+                self.semantic_token_bank is None or
+                self.scenario_token is None or
+                self.semantic_token_count <= 0):
             return None
-        token_device = device or self.global_token.device
-        global_token = self.global_token.to(token_device).expand(batch_size, -1, -1)
-        if self.semantic_token_count <= 0:
-            return global_token
 
-        if semantic_token_ids is None:
-            ids = torch.arange(self.semantic_token_count, device=token_device, dtype=torch.long)
-            ids = ids.unsqueeze(0).expand(batch_size, -1)
-            mask = None
+        token_device = device or self.scenario_token.device
+        scenario = self.scenario_token.to(token_device).expand(batch_size, -1, -1)
+        semantic = self._compute_semantic_token_embedding(batch_size, semantic_token_ids, token_device)
+        if semantic is None:
+            extra_tokens = scenario
         else:
-            semantic_token_ids = semantic_token_ids.to(token_device, dtype=torch.long)
-            if semantic_token_ids.dim() == 1:
-                semantic_token_ids = semantic_token_ids.unsqueeze(1)
-            mask = (semantic_token_ids >= 0).unsqueeze(-1).to(global_token.dtype)
-            ids = semantic_token_ids.clamp(min=0, max=self.semantic_token_count - 1)
-
-        semantic_tokens = F.embedding(ids, self.semantic_token_bank.to(token_device))
-        if mask is not None:
-            semantic_tokens = semantic_tokens * mask
-        return torch.cat([global_token, semantic_tokens], dim=1)
+            extra_tokens = torch.cat([scenario, semantic], dim=1)
+        self._current_extra_token_count = extra_tokens.shape[1]
+        return extra_tokens
 
     def forward_features(self, x, task='both', return_features=False, semantic_token_ids: Optional[torch.Tensor] = None):
         """提取任务特定特征"""
-        h, w = x.shape[-2:]
+        orig_h, orig_w = x.shape[-2:]
+        h, w = orig_h, orig_w
 
         # 对于 ViT patch embed，需要输入尺寸是 patch_size 的整数倍；否则进行零填充
         patch_size = self.get_patch_size()
@@ -306,24 +305,30 @@ class DepthAnythingV2_MultiTask(nn.Module):
         pad_w = (patch_size - (w % patch_size)) % patch_size
         if pad_h or pad_w:
             x = F.pad(x, (0, pad_w, 0, pad_h), mode='constant', value=0)
+        effective_h = h + pad_h
+        effective_w = w + pad_w
+        self._current_hw = (orig_h, orig_w)
+        self._current_effective_hw = (effective_h, effective_w)
 
         results = {}
 
-        extra_tokens = None
-        if self.use_semantic_tokens:
-            extra_tokens = self._build_extra_tokens(x.shape[0], semantic_token_ids, x.device)
+        extra_tokens = self._build_extra_tokens(x.shape[0], semantic_token_ids, x.device) if self.use_semantic_tokens else None
+        if extra_tokens is None:
+            self._current_extra_token_count = 0
 
         # 根据任务提取不同的层特征
         if task in ['depth', 'both']:
             # 深度任务使用指定的layers
             self._set_adapter_scopes(['shared', 'depth'])
-            depth_features = self.backbone.get_intermediate_layers(
+            raw_depth_features = self.backbone.get_intermediate_layers(
                 x,
                 n=self.depth_layer_idx[self.encoder],
                 return_class_token=True,
                 extra_tokens=extra_tokens,
             )
-            depth_features = [(patch, cls) for patch, cls in depth_features]
+            depth_features = []
+            for patch, cls in raw_depth_features:
+                depth_features.append((self._strip_extra_tokens(patch), cls))
             results['depth_features'] = depth_features
             if return_features and depth_features:
                 last_patch = depth_features[-1][0]
@@ -332,24 +337,27 @@ class DepthAnythingV2_MultiTask(nn.Module):
         if task in ['seg', 'both'] and self.seg_head is not None:
             # 根据配置获取分割任务的特征
             self._set_adapter_scopes(['shared', 'seg'])
-            seg_features = self.backbone.get_intermediate_layers(
+            raw_seg_features = self.backbone.get_intermediate_layers(
                 x,
                 n=self.seg_layer_idx,
                 return_class_token=False,
                 extra_tokens=extra_tokens,
             )
+            seg_features = [self._strip_extra_tokens(feat) for feat in raw_seg_features]
             results['seg_features'] = seg_features
             if return_features and seg_features:
                 results['ga_seg_tokens'] = seg_features[-1]
 
         self._set_adapter_scopes(['shared'])
-        return results, h, w
+        return results, orig_h, orig_w
 
     def forward_depth(self, features, h, w):
         """深度估计前向传播"""
         patch_size = self.get_patch_size()
+        eff_h, eff_w = getattr(self, "_current_effective_hw", (h, w))
         # 使用向上取整以匹配前面可能的padding后产生的token网格
-        patch_h, patch_w = math.ceil(h / patch_size), math.ceil(w / patch_size)
+        patch_h = math.ceil(eff_h / patch_size)
+        patch_w = math.ceil(eff_w / patch_size)
         depth_pred = self.depth_head(features, patch_h, patch_w)
         return depth_pred
 
@@ -375,7 +383,9 @@ class DepthAnythingV2_MultiTask(nn.Module):
         if self.seg_head is None:
             raise RuntimeError("Segmentation head is disabled but forward_segmentation was called.")
         patch_size = self.get_patch_size()
-        patch_h, patch_w = math.ceil(h / patch_size), math.ceil(w / patch_size)
+        eff_h, eff_w = getattr(self, "_current_effective_hw", (h, w))
+        patch_h = math.ceil(eff_h / patch_size)
+        patch_w = math.ceil(eff_w / patch_size)
         reshaped_features = self._reshape_seg_inputs(features, patch_h, patch_w)
         seg_pred = self.seg_head(reshaped_features)
         return seg_pred
@@ -482,7 +492,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
 
         return results
 
-    def _build_endo_unid_cfg(self) -> Dict[str, dict]:
+    def _build_adapter_scope_cfg(self) -> Dict[str, dict]:
         depth_layers = set(self.depth_layer_idx[self.encoder])
         seg_layers = set(self.seg_layer_idx)
         total_layers = self.num_layers[self.encoder]
@@ -497,21 +507,21 @@ class DepthAnythingV2_MultiTask(nn.Module):
                 scopes.append('shared')
             block_scopes[idx] = scopes
         ranks = {
-            'shared': self.endo_unid_params.get('shared_r', self.endo_unid_params.get('endo_unid_shared_r', 4)),
-            'depth': self.endo_unid_params.get('depth_r', self.endo_unid_params.get('endo_unid_depth_r', 8)),
-            'seg': self.endo_unid_params.get('seg_r', self.endo_unid_params.get('endo_unid_seg_r', 8)),
+            'shared': self.adapter_scope_params.get('shared_r', 4),
+            'depth': self.adapter_scope_params.get('depth_r', 8),
+            'seg': self.adapter_scope_params.get('seg_r', 8),
         }
         alphas = {
-            'shared': self.endo_unid_params.get('shared_alpha', self.endo_unid_params.get('endo_unid_shared_alpha', 8)),
-            'depth': self.endo_unid_params.get('depth_alpha', self.endo_unid_params.get('endo_unid_depth_alpha', 16)),
-            'seg': self.endo_unid_params.get('seg_alpha', self.endo_unid_params.get('endo_unid_seg_alpha', 16)),
+            'shared': self.adapter_scope_params.get('shared_alpha', 8),
+            'depth': self.adapter_scope_params.get('depth_alpha', 16),
+            'seg': self.adapter_scope_params.get('seg_alpha', 16),
         }
         cfg = {
             'block_scopes': block_scopes,
             'ranks': ranks,
             'alphas': alphas,
-            'shared_shards': self.endo_unid_params.get('shared_shards', self.endo_unid_params.get('endo_unid_shared_shards', 1)),
-            'dropout': self.endo_unid_params.get('dropout', self.endo_unid_params.get('endo_unid_dropout', 0.0)),
+            'shared_shards': self.adapter_scope_params.get('shared_shards', 1),
+            'dropout': self.adapter_scope_params.get('dropout', 0.0),
             'default_scopes': ['shared'],
         }
         return cfg
@@ -519,6 +529,60 @@ class DepthAnythingV2_MultiTask(nn.Module):
     def _set_adapter_scopes(self, scopes: List[str]) -> None:
         if hasattr(self.backbone, "set_active_adapter_scopes"):
             self.backbone.set_active_adapter_scopes(scopes)
+
+    def _strip_extra_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
+        if tokens is None or tokens.dim() != 3:
+            return tokens
+        extra = getattr(self, "_current_extra_token_count", 0)
+        if extra <= 0 or tokens.shape[1] <= extra:
+            return tokens
+        return tokens[:, extra:, :]
+
+    def _compute_semantic_token_embedding(self,
+                                          batch_size: int,
+                                          semantic_token_ids: Optional[torch.Tensor],
+                                          device: torch.device) -> Optional[torch.Tensor]:
+        if self.semantic_token_bank is None or self.semantic_token_count <= 0:
+            return None
+        ids: torch.Tensor
+        mask: torch.Tensor
+        if semantic_token_ids is None:
+            ids = torch.arange(self.semantic_token_count, device=device, dtype=torch.long)
+            ids = ids.unsqueeze(0).expand(batch_size, -1)
+            mask = torch.ones_like(ids, dtype=torch.bool)
+        else:
+            ids = semantic_token_ids.to(device, dtype=torch.long)
+            if ids.dim() == 1:
+                ids = ids.unsqueeze(1)
+            if ids.size(0) != batch_size:
+                if ids.size(0) == 1:
+                    ids = ids.expand(batch_size, -1)
+                else:
+                    ids = ids[:batch_size]
+                    if ids.size(0) < batch_size:
+                        pad = torch.full((batch_size - ids.size(0), ids.size(1)), 0, dtype=torch.long, device=device)
+                        ids = torch.cat([ids, pad], dim=0)
+            mask = ids > 0
+            ids = ids.clamp(min=1, max=self.semantic_token_count) - 1
+
+        embeddings = F.embedding(ids, self.semantic_token_bank.to(device))
+        mask_f = mask.unsqueeze(-1).float()
+        masked_embeddings = embeddings * mask_f
+        counts = mask_f.sum(dim=1, keepdim=True)
+        counts = counts.clamp_min(1.0)
+        mean_embeddings = masked_embeddings.sum(dim=1, keepdim=True) / counts
+
+        zero_mask = (mask.sum(dim=1, keepdim=True) == 0)
+        if zero_mask.any():
+            if self.scenario_token is not None:
+                scenario_embed = self.scenario_token.to(device)
+                scenario_embed = scenario_embed.expand(batch_size, -1, -1)
+                mean_embeddings[zero_mask.squeeze(-1), 0, :] = scenario_embed[zero_mask.squeeze(-1), 0, :]
+            else:
+                fallback = self.semantic_token_bank.mean(dim=0, keepdim=True)
+                mean_embeddings[zero_mask.squeeze(-1), 0, :] = fallback
+
+        return mean_embeddings
 
     def get_depth_prediction(self, x):
         """仅获取深度预测"""
@@ -557,7 +621,7 @@ class DepthAnythingV2_MultiTask_Frozen(DepthAnythingV2_MultiTask):
                  lora_r=4,
                  lora_alpha=8,
                  camera_head_mode: str = "none",
-                 endo_unid_params: Optional[dict] = None,
+                 adapter_scope_params: Optional[dict] = None,
                  use_semantic_tokens: bool = False,
                  semantic_token_count: int = 0):
         # 直接传递所有参数给父类
@@ -579,7 +643,7 @@ class DepthAnythingV2_MultiTask_Frozen(DepthAnythingV2_MultiTask):
             lora_r=lora_r,
             lora_alpha=lora_alpha,
             camera_head_mode=camera_head_mode,
-            endo_unid_params=endo_unid_params,
+            adapter_scope_params=adapter_scope_params,
             use_semantic_tokens=use_semantic_tokens,
             semantic_token_count=semantic_token_count,
         )
@@ -625,7 +689,7 @@ def create_multitask_model(encoder='vits',
                            lora_r: int = 4,
                            lora_alpha: int = 8,
                            camera_head_mode: str = "none",
-                           endo_unid_params: Optional[dict] = None,
+                           adapter_scope_params: Optional[dict] = None,
                            use_semantic_tokens: bool = False,
                            semantic_token_count: int = 0):
     """
@@ -713,7 +777,7 @@ def create_multitask_model(encoder='vits',
         'lora_r': lora_r,
         'lora_alpha': lora_alpha,
         'camera_head_mode': camera_head_mode,
-        'endo_unid_params': endo_unid_params,
+        'adapter_scope_params': adapter_scope_params,
         'use_semantic_tokens': use_semantic_tokens,
         'semantic_token_count': semantic_token_count,
     }

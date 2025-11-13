@@ -101,7 +101,7 @@ fi
 export CUDA_DEVICES
 export NUM_GPUS=${NUM_GPUS:-1}
 export MODE="mtlga"
-export GA_LOSS_WEIGHT=0.1
+export GA_LOSS_WEIGHT=0.05
 export GA_LOSS_START_EPOCH=15
 if [[ -n "${BATCH_SIZE_CLI}" ]]; then
     export BATCH_SIZE="${BATCH_SIZE_CLI}"

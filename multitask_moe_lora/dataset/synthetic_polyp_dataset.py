@@ -133,6 +133,8 @@ class SyntheticPolypDataset(Dataset):
             dataset_name=self.dataset_name,
         )
 
+        clip_id = self._infer_clip_id(sample.rel_image_path)
+
         return {
             "image": image_tensor,
             "depth": depth_tensor,
@@ -145,7 +147,17 @@ class SyntheticPolypDataset(Dataset):
             "source_type": self.source_type,
             "dataset_name": self.dataset_name,
             "intrinsics": self.intrinsics.clone(),
+            "clip_id": clip_id,
         }
+
+    def _infer_clip_id(self, rel_path: str) -> Optional[str]:
+        parts = rel_path.replace("\\", "/").split("/")
+        if not parts:
+            return None
+        first = parts[0]
+        if first.lower().startswith("vid"):
+            return first
+        return None
 
     @staticmethod
     def _read_image(path: str) -> np.ndarray:

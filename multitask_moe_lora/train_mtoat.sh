@@ -2,12 +2,6 @@
 set -euo pipefail
 
 # Convenience launcher for mtoat (mtlora + adaptive tokens).
-# Options:
-#   --cuda DEVICES      set CUDA_VISIBLE_DEVICES (default: 0)
-#   --profile LS|NO     dataset profile (default: LS)
-#   --base-path PATH    override BASE_DATA_PATH
-#   --batch-size N      override depth batch size
-#   --tokens N          number of semantic tokens (default: 10)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -22,12 +16,8 @@ usage() {
     cat <<'EOF'
 Usage: bash train_mtoat.sh [--cuda DEVICES] [--profile LS|NO] [--base-path PATH] [--batch-size N] [--tokens N] [extra args...]
 
-Examples:
-  bash train_mtoat.sh --cuda 0,1 --profile NO
-  bash train_mtoat.sh --profile LS --base-path /mnt/DATA/ziyi/multitask -- --epochs 120
-  bash train_mtoat.sh --tokens 8 --batch-size 6 -- --epochs 80
-
-Anything after "--" is forwarded to train_lora.sh unchanged.
+Adds semantic tokens automatically (default count=10) and runs MODE=mtoat.
+Arguments after "--" are forwarded to train_lora.sh.
 EOF
 }
 
@@ -106,9 +96,11 @@ fi
 export CUDA_DEVICES
 export NUM_GPUS=${NUM_GPUS:-1}
 export MODE="mtoat"
+
 if [[ -n "${BATCH_SIZE_CLI}" ]]; then
     export BATCH_SIZE="${BATCH_SIZE_CLI}"
 fi
+
 if [[ -n "${TOKEN_COUNT_CLI}" ]]; then
     export SEMANTIC_TOKEN_COUNT="${TOKEN_COUNT_CLI}"
 elif [[ -z "${SEMANTIC_TOKEN_COUNT:-}" ]]; then
