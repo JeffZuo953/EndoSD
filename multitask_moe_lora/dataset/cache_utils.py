@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from .camera_utils import get_camera_info, normalize_intrinsics
 from .utils import compute_valid_mask, map_ls_semseg_to_10_classes, map_semseg_to_three_classes
-from ..util.local_cache import LocalCacheManager
+from multitask_moe_lora.util.local_cache import LocalCacheManager
 
 logger = logging.getLogger(__name__)
 

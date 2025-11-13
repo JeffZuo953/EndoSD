@@ -84,21 +84,21 @@ def make_camera_info(width: int, height: int, fx: float, fy: float, cx: float, c
 CameraProvider = Callable[[Optional[str]], Optional[CameraInfo]]
 _CAMERA_INFO_REGISTRY: Dict[str, CameraProvider] = {}
 _AUTO_IMPORT_MODULES: Dict[str, str] = {
-    "scared": "dataset.metadata.scared",
-    "scard": "dataset.metadata.scared",
-    "stereomis": "dataset.metadata.stereomis",
-    "endovis2017": "dataset.metadata.endovis2017",
-    "endovis2018": "dataset.metadata.endovis2018",
-    "endonerf": "dataset.metadata.endonerf",
-    "dvpn": "dataset.metadata.dvpn",
-    "simcol": "dataset.metadata.simcol",
-    "c3vd": "dataset.metadata.c3vd",
-    "c3vdv2": "dataset.metadata.c3vd",
-    "kidney3d": "dataset.metadata.kidney3d",
-    "endomapper": "dataset.metadata.endomapper",
-    "hamlyn": "dataset.metadata.hamlyn",
-    "synthetic_polyp": "dataset.metadata.synthetic_polyp",
-    "syntheticpolyp": "dataset.metadata.synthetic_polyp",
+    "scared": "multitask_moe_lora.dataset.metadata.scared",
+    "scard": "multitask_moe_lora.dataset.metadata.scared",
+    "stereomis": "multitask_moe_lora.dataset.metadata.stereomis",
+    "endovis2017": "multitask_moe_lora.dataset.metadata.endovis2017",
+    "endovis2018": "multitask_moe_lora.dataset.metadata.endovis2018",
+    "endonerf": "multitask_moe_lora.dataset.metadata.endonerf",
+    "dvpn": "multitask_moe_lora.dataset.metadata.dvpn",
+    "simcol": "multitask_moe_lora.dataset.metadata.simcol",
+    "c3vd": "multitask_moe_lora.dataset.metadata.c3vd",
+    "c3vdv2": "multitask_moe_lora.dataset.metadata.c3vd",
+    "kidney3d": "multitask_moe_lora.dataset.metadata.kidney3d",
+    "endomapper": "multitask_moe_lora.dataset.metadata.endomapper",
+    "hamlyn": "multitask_moe_lora.dataset.metadata.hamlyn",
+    "synthetic_polyp": "multitask_moe_lora.dataset.metadata.synthetic_polyp",
+    "syntheticpolyp": "multitask_moe_lora.dataset.metadata.synthetic_polyp",
 }
 
 
