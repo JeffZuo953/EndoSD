@@ -5,7 +5,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-CUDA_DEVICES="0"
+DEFAULT_CUDA_DEVICES="2,3,4,5"
+DEFAULT_NUM_GPUS=4
+DEFAULT_BASE_DATA_PATH="/data/ziyi/multitask"
+DEFAULT_BATCH_SIZE=3
+DEFAULT_SEG_BATCH_SIZE=3
+FIXED_LEARNING_RATE="5e-5"
+FIXED_LR_DEPTH="5e-5"
+FIXED_LR_SEG="5e-4"
+FIXED_LR_CAMERA="5e-5"
+
+CUDA_DEVICES="${CUDA_DEVICES:-${DEFAULT_CUDA_DEVICES}}"
 DATA_PROFILE="NO"
 BASE_DATA_PATH_CLI=""
 BATCH_SIZE_CLI=""
@@ -81,12 +91,8 @@ esac
 
 if [[ -n "${BASE_DATA_PATH_CLI}" ]]; then
     export BASE_DATA_PATH="${BASE_DATA_PATH_CLI}"
-elif [[ -z "${BASE_DATA_PATH:-}" ]]; then
-    if [[ -d "/mnt/DATA" ]]; then
-        export BASE_DATA_PATH="/mnt/DATA/ziyi/multitask"
-    else
-        export BASE_DATA_PATH="/data/ziyi/multitask"
-    fi
+else
+    export BASE_DATA_PATH="${DEFAULT_BASE_DATA_PATH}"
 fi
 
 if [[ -z "${NUM_GPUS:-}" ]]; then
@@ -100,16 +106,24 @@ if [[ -z "${PRETRAINED_WEIGHTS:-}" && -f "${DEFAULT_PRETRAIN}" ]]; then
 fi
 
 export CUDA_DEVICES
-export NUM_GPUS=${NUM_GPUS:-1}
+export NUM_GPUS=${NUM_GPUS:-${DEFAULT_NUM_GPUS}}
 export MODE="endounid"
 export GA_LOSS_WEIGHT="${GA_LOSS_WEIGHT:-0.05}"
 export GA_LOSS_START_EPOCH="${GA_LOSS_START_EPOCH:-15}"
+export LEARNING_RATE="${FIXED_LEARNING_RATE}"
+export LR_DEPTH="${FIXED_LR_DEPTH}"
+export LR_SEG="${FIXED_LR_SEG}"
+export LR_CAMERA="${FIXED_LR_CAMERA}"
 
 if [[ -n "${BATCH_SIZE_CLI}" ]]; then
     export BATCH_SIZE="${BATCH_SIZE_CLI}"
+elif [[ -z "${BATCH_SIZE:-}" ]]; then
+    export BATCH_SIZE="${DEFAULT_BATCH_SIZE}"
 fi
 if [[ -n "${SEG_BATCH_SIZE_CLI}" ]]; then
     export SEG_BATCH_SIZE="${SEG_BATCH_SIZE_CLI}"
+elif [[ -z "${SEG_BATCH_SIZE:-}" ]]; then
+    export SEG_BATCH_SIZE="${DEFAULT_SEG_BATCH_SIZE}"
 fi
 if [[ -n "${TOKEN_COUNT_CLI}" ]]; then
     export SEMANTIC_TOKEN_COUNT="${TOKEN_COUNT_CLI}"

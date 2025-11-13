@@ -102,6 +102,9 @@ BATCH_SIZE=${BATCH_SIZE:-8}
 SEG_BATCH_SIZE=${SEG_BATCH_SIZE:-8}
 VAL_BATCH_SIZE=${VAL_BATCH_SIZE:-36}
 LEARNING_RATE=${LEARNING_RATE:-5e-5}
+LR_DEPTH=${LR_DEPTH:-}
+LR_SEG=${LR_SEG:-}
+LR_CAMERA=${LR_CAMERA:-}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
 IMG_SIZE=${IMG_SIZE:-518}
 SAVE_INTERVAL=${SAVE_INTERVAL:-5}
@@ -215,6 +218,7 @@ echo "  Encoder:             ${ENCODER} | Mode: ${MODE}"
 echo "  Dataset Profile:     ${DATA_PROFILE} (${DATASET_CONFIG_NAME})"
 echo "  Batch Sizes:         depth=${BATCH_SIZE}, seg=${SEG_BATCH_SIZE}, val=${VAL_BATCH_SIZE}"
 echo "  Image Size:          ${IMG_SIZE}"
+echo "  Learning Rates:      base=${LEARNING_RATE}${LR_DEPTH:+, depth=${LR_DEPTH}}${LR_SEG:+, seg=${LR_SEG}}${LR_CAMERA:+, camera=${LR_CAMERA}}"
 echo "  Save Path:           ${SAVE_PATH}"
 if [[ "${MODE}" == "mtlga" ]]; then
     echo "  GA Loss:             weight=${GA_LOSS_WEIGHT}, start_epoch=${GA_LOSS_START_EPOCH}"
@@ -272,6 +276,16 @@ TRAIN_CMD=(
     --save-path "${SAVE_PATH}"
     --checkpoint-policy "full"
 )
+
+if [[ -n "${LR_DEPTH}" ]]; then
+    TRAIN_CMD+=(--lr-depth "${LR_DEPTH}")
+fi
+if [[ -n "${LR_SEG}" ]]; then
+    TRAIN_CMD+=(--lr-seg "${LR_SEG}")
+fi
+if [[ -n "${LR_CAMERA}" ]]; then
+    TRAIN_CMD+=(--lr-camera "${LR_CAMERA}")
+fi
 
 if [[ -n "${TRAIN_DATASET_INCLUDE}" ]]; then
     TRAIN_CMD+=(--train-dataset-include "${TRAIN_DATASET_INCLUDE}")

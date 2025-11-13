@@ -18,9 +18,13 @@ def remap_checkpoint_keys(state_dict: Dict[str, Any], model: torch.nn.Module, co
     model_state_dict = actual_model.state_dict()
     new_state_dict = {}
 
-    # Debug: show config mode
+    # Debug: show config mode and detected LoRA usage
     config_mode = getattr(config, 'mode', 'original')
-    logger.info(f"Config mode: {config_mode}, is_lora: {'lora' in config_mode.lower() if isinstance(config_mode, str) else False}")
+    config_mode_str = str(config_mode).lower() if isinstance(config_mode, str) else ""
+    model_uses_lora = bool(getattr(actual_model, "use_lora", False))
+    extra_lora_modes = {"mtoat", "endounid"}
+    is_lora_mode = model_uses_lora or (config_mode_str in extra_lora_modes) or ("lora" in config_mode_str)
+    logger.info(f"Config mode: {config_mode}, model.use_lora={model_uses_lora}, is_lora_mode={is_lora_mode}")
 
     # Debug: show original checkpoint attention keys
     logger.info("--- Original Checkpoint Attention Keys (blocks.0.attn) ---")
@@ -73,9 +77,6 @@ def remap_checkpoint_keys(state_dict: Dict[str, Any], model: torch.nn.Module, co
 
         # LoRA transformation for attention layers (dinov2 and dinov3)
         # LoRA transformation for attention layers should only apply in LoRA modes
-        config_mode = getattr(config, 'mode', 'original')
-        is_lora_mode = 'lora' in config_mode.lower() if isinstance(config_mode, str) else False
-
         # Handle attention layer transformations (bidirectional)
         if '.attn.qkv.' in target_k or '.attn.proj.' in target_k:
             if is_lora_mode:

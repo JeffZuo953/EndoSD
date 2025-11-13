@@ -126,10 +126,12 @@ class DepthAnythingV2_MultiTask(nn.Module):
             else:
                 raise ValueError(f"Unknown seg_input_type: {self.seg_input_type}")
 
-        if self.seg_head_type not in {"linear", "sf"}:
+        allowed_seg_heads = {"linear", "sf", "none"}
+        if self.seg_head_type not in allowed_seg_heads:
             raise ValueError(f"Unsupported seg_head_type: {self.seg_head_type}")
-        # 新的语义头共享与深度头相同的层索引，便于特征对齐
-        self.seg_layer_idx = self.depth_layer_idx[self.encoder]
+        if self.seg_head_type != "none":
+            # 新的语义头共享与深度头相同的层索引，便于特征对齐
+            self.seg_layer_idx = self.depth_layer_idx[self.encoder]
 
         if self.use_semantic_tokens:
             desired_token_count = max(len(self.seg_layer_idx) - 1, 1)
