@@ -391,7 +391,7 @@ def _make_collate_fn(stride: int):
         if max_w % stride != 0:
             max_w = max_w + (stride - max_w % stride)
 
-        images, depths, masks, max_depths, source_types, dataset_names = [], [], [], [], [], []
+        images, depths, masks, max_depths, source_types, dataset_names, clip_ids = [], [], [], [], [], [], []
         valid_masks, depth_valid_masks, seg_valid_masks = [], [], []
         camera_intrinsics: List[Optional[torch.Tensor]] = []
         camera_intrinsics_mask: List[bool] = []
@@ -412,6 +412,7 @@ def _make_collate_fn(stride: int):
             if "source_type" in item:
                 source_types.append(item["source_type"])
             dataset_names.append(item.get("dataset_name"))
+            clip_ids.append(item.get("clip_id"))
 
             if "depth" in item:
                 depth = item["depth"]
