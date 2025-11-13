@@ -450,7 +450,7 @@ class DepthAnythingV2_MultiTask(nn.Module):
         if return_features:
             # 根据task选择合适的features来提取backbone特征
             if 'depth_features' in feature_results:
-                backbone_features = feature_results['depth_features'][-1]  # Get patch feature from (patch, cls) tuple
+                backbone_features = feature_results['depth_features'][-1]
             elif 'seg_features' in feature_results:
                 # seg_features from backbone are already just patch features
                 backbone_features = feature_results['seg_features'][-1]
@@ -459,7 +459,12 @@ class DepthAnythingV2_MultiTask(nn.Module):
 
             # 重新整理特征维度
             patch_size = self.get_patch_size()
-            patch_h, patch_w = h // patch_size, w // patch_size
+            patch_h = math.ceil(h / patch_size)
+            patch_w = math.ceil(w / patch_size)
+
+            if isinstance(backbone_features, tuple):
+                backbone_features = backbone_features[0]
+
             b, _, c = backbone_features.shape
             backbone_features = backbone_features.permute(0, 2, 1).reshape(b, c, patch_h, patch_w).contiguous()
             results['features'] = F.adaptive_avg_pool2d(backbone_features, (8, 8))
