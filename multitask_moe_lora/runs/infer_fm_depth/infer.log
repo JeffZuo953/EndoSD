@@ -45,3 +45,5 @@
 [2025-11-12 19:08:07][ INFO] Initialized 0 new parameters (not found in checkpoint or skipped).
 [2025-11-12 19:08:07][ INFO] Only model weights loaded. Optimizer, scheduler, and epoch are not restored.
 [2025-11-12 19:08:07][ INFO] Seg head disabled via config; skipping seg_head validation.
+[2025-11-12 19:28:25][ INFO] Finished inference. Saved 27962 files (root=/data/ziyi/result).
+[2025-11-12 19:28:25][ INFO] Camera report saved to /data/ziyi/result/camera_report.csv
