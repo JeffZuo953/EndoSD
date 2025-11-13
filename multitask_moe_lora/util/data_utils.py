@@ -865,16 +865,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
             ],
             "depth_val_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF[train]",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
-                {
                     "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
                     "dataset_type": "NO",
                     "name": "Kidney3D",
@@ -933,16 +923,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 },
             ],
             "seg_val_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF[train]",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoNeRF",
-                },
                 {
                     "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
                     "dataset_type": "NO",
@@ -1126,6 +1106,16 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
                 },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoNeRF[train]",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoNeRF[val]",
+                },
             ],
             "seg_train_caches": [
                 {
@@ -1159,6 +1149,16 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "path": "/data/ziyi/multitask/data/LS/EndoVis2017/Endovis2017_seg_depth/cache/eval_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2017",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoNeRF[train]",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoNeRF/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoNeRF[val]",
                 },
             ],
         },
