@@ -82,7 +82,7 @@ def _load_semantic_token_index_map() -> Dict[str, Union[List[int], Dict[str, Lis
             "kvasir-seg": [0, 3],
             "etis-laribpolypdb": [0, 3],
             "syntheticpolyp": {
-                "default": [4],
+                "default": [0, 3],
                 "vid40": [4],
                 "vid41": [5],
                 "vid42": [6],
