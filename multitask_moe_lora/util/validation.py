@@ -1085,13 +1085,17 @@ def validate_and_visualize(model: torch.nn.Module,
             stats_tensor[11] += (abs_diff <= 0.02).sum()
 
     elif task_type == 'seg':
+        seg_metrics: Dict[str, SegMetric] = {
+            "NO": SegMetric(config.num_classes),
+            "LS": SegMetric(config.num_classes),
+            "combined": SegMetric(config.num_classes),
+        }
         dataset_seg_metrics: Dict[str, SegMetric] = {}
 
         def _resolve_dataset_metric(dataset_label: Optional[str], raw_source: str) -> SegMetric:
             name_key = (dataset_label or raw_source or "unknown").strip().lower()
             if name_key not in dataset_seg_metrics:
-                valid_ids = _lookup_dataset_token_ids(name_key, batch.get("clip_id") if isinstance(batch, dict) else None)
-                dataset_seg_metrics[name_key] = SegMetric(config.num_classes, valid_classes=valid_ids)
+                dataset_seg_metrics[name_key] = SegMetric(config.num_classes)
             return dataset_seg_metrics[name_key]
 
     def _process_validation_batch(batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
