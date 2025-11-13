@@ -869,11 +869,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "dataset_type": "NO",
                     "name": "Kidney3D",
                 },
-                {
-                    "path": "/mnt/DATA/ziyi/multitask/data/NO/SyntheticDatabase_testingset_PolypSize/cache_pt/all_cache.txt",
-                    "dataset_type": "NO",
-                    "name": "SyntheticPolyp",
-                },
             ],
             "seg_train_caches": [
                 {
@@ -927,11 +922,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
                     "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/val_cache.txt",
                     "dataset_type": "NO",
                     "name": "Kidney3D",
-                },
-                {
-                    "path": "/mnt/DATA/ziyi/multitask/data/NO/SyntheticDatabase_testingset_PolypSize/cache_pt/all_cache.txt",
-                    "dataset_type": "NO",
-                    "name": "SyntheticPolyp",
                 },
                 {
                     "path": "/data/ziyi/multitask/data/NO/RIRS-SegC/val_split_cache.txt",
