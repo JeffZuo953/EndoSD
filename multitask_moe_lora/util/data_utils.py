@@ -215,7 +215,7 @@ def collate_fn_multitask(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     if max_w % stride != 0:
         max_w = max_w + (stride - max_w % stride)
 
-    images, depths, masks, max_depths, source_types, dataset_names, clip_ids = [], [], [], [], [], [], []
+        images, depths, masks, max_depths, source_types, dataset_names, clip_ids = [], [], [], [], [], [], []
     valid_masks, depth_valid_masks, seg_valid_masks = [], [], []
     camera_intrinsics: List[Optional[torch.Tensor]] = []
     camera_intrinsics_mask: List[bool] = []
