@@ -11,11 +11,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CUDA_DEVICES="0"
 DATA_PROFILE="NO"
 BASE_DATA_PATH_CLI=""
+BATCH_SIZE_CLI=""
 PASS_ARGS=()
 
 usage() {
     cat <<'EOF'
-Usage: bash train_mtlga.sh [--cuda DEVICES] [--profile LS|NO] [--base-path PATH] [extra args...]
+Usage: bash train_mtlga.sh [--cuda DEVICES] [--profile LS|NO] [--base-path PATH] [--batch-size N] [extra args...]
 
 Adds GA loss automatically with weight=0.1 starting from epoch 15.
 Additional arguments are forwarded to train_lora.sh.
@@ -37,6 +38,11 @@ while [[ $# -gt 0 ]]; do
         --base-path)
             [[ $# -ge 2 ]] || { echo "--base-path requires a path" >&2; exit 1; }
             BASE_DATA_PATH_CLI="$2"
+            shift 2
+            ;;
+        --batch-size)
+            [[ $# -ge 2 ]] || { echo "--batch-size requires an integer" >&2; exit 1; }
+            BATCH_SIZE_CLI="$2"
             shift 2
             ;;
         -h|--help)
@@ -91,5 +97,8 @@ export NUM_GPUS=${NUM_GPUS:-1}
 export MODE="mtlga"
 export GA_LOSS_WEIGHT=0.1
 export GA_LOSS_START_EPOCH=15
+if [[ -n "${BATCH_SIZE_CLI}" ]]; then
+    export BATCH_SIZE="${BATCH_SIZE_CLI}"
+fi
 
 exec bash "${SCRIPT_DIR}/train_lora.sh" --profile "${DATA_PROFILE}" "${PASS_ARGS[@]}"

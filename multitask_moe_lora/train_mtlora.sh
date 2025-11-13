@@ -11,15 +11,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CUDA_DEVICES="0"
 DATA_PROFILE="LS"
 BASE_DATA_PATH_CLI=""
+BATCH_SIZE_CLI=""
 PASS_ARGS=()
 
 usage() {
     cat <<'EOF'
-Usage: bash train_mtlora.sh [--cuda DEVICES] [--profile LS|NO] [--base-path PATH] [extra args...]
+Usage: bash train_mtlora.sh [--cuda DEVICES] [--profile LS|NO] [--base-path PATH] [--batch-size N] [extra args...]
 
 Examples:
   bash train_mtlora.sh --cuda 0,1 --profile NO
   bash train_mtlora.sh --profile LS --base-path /mnt/DATA/ziyi/multitask -- --epochs 100
+  bash train_mtlora.sh --batch-size 6 -- --epochs 80
 
 Extra args (after options or following --) are forwarded to train_lora.sh.
 EOF
@@ -40,6 +42,11 @@ while [[ $# -gt 0 ]]; do
         --base-path)
             [[ $# -ge 2 ]] || { echo "--base-path requires a path" >&2; exit 1; }
             BASE_DATA_PATH_CLI="$2"
+            shift 2
+            ;;
+        --batch-size)
+            [[ $# -ge 2 ]] || { echo "--batch-size requires an integer" >&2; exit 1; }
+            BATCH_SIZE_CLI="$2"
             shift 2
             ;;
         -h|--help)
@@ -94,5 +101,8 @@ fi
 export CUDA_DEVICES
 export NUM_GPUS=${NUM_GPUS:-1}
 export MODE="mtlora"
+if [[ -n "${BATCH_SIZE_CLI}" ]]; then
+    export BATCH_SIZE="${BATCH_SIZE_CLI}"
+fi
 
 exec bash "${SCRIPT_DIR}/train_lora.sh" --profile "${DATA_PROFILE}" "${PASS_ARGS[@]}"
