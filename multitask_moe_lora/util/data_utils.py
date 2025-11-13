@@ -817,16 +817,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
         'no_bundle': {
             "depth_train_caches": [
                 {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth[val]",
-                },
-                {
                     "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
                     "dataset_type": "NO",
                     "name": "Kidney3D",
@@ -860,16 +850,6 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 },
             ],
             "seg_train_caches": [
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth",
-                },
-                {
-                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
-                    "dataset_type": "LS",
-                    "name": "EndoSynth[val]",
-                },
                 {
                     "path": "/data/ziyi/multitask/data/NO/Kidney3D-CT-depth-seg/cache_pt/train_cache.txt",
                     "dataset_type": "NO",
@@ -1079,6 +1059,16 @@ def create_datasets(config: TrainingConfig) -> tuple:
         'ls_bundle': {
             "depth_train_caches": [
                 {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth[val]",
+                },
+                {
                     "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
                     "dataset_type": "LS",
                     "name": "EndoVis2018",
@@ -1102,6 +1092,16 @@ def create_datasets(config: TrainingConfig) -> tuple:
                 },
             ],
             "seg_train_caches": [
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/train_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth",
+                },
+                {
+                    "path": "/data/ziyi/multitask/data/LS/EndoSynth/cache_pt/val_cache.txt",
+                    "dataset_type": "LS",
+                    "name": "EndoSynth[val]",
+                },
                 {
                     "path": "/data/ziyi/multitask/data/LS/EndoVis2018/cache_pt/train_cache.txt",
                     "dataset_type": "LS",
