@@ -25,7 +25,7 @@ import torch.distributed as dist
 from .config import TrainingConfig
 from .loss import SiLogLoss
 from .metric import SegMetric, eval_depth
-from .data_utils import summarize_loader_composition
+from .data_utils import summarize_loader_composition, _lookup_dataset_token_ids
 from .palette import get_palette
 
 LS_SEG_CLASS_WHITELIST = [0, 1, 2, 3, 5, 6, 7, 8]
@@ -90,7 +90,7 @@ def _persist_segmentation_metrics(save_path: Optional[str],
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-        logger.info("Saved per-dataset segmentation metrics to %s", out_path)
+        logger.info("Saved segmentation metrics snapshot to %s", out_path)
     except OSError as exc:
         logger.warning("Failed to write segmentation metrics to %s: %s", out_path, exc)
 
@@ -1091,11 +1091,17 @@ def validate_and_visualize(model: torch.nn.Module,
             "combined": SegMetric(config.num_classes),
         }
         dataset_seg_metrics: Dict[str, SegMetric] = {}
+        dataset_seg_labels: Dict[str, str] = {}
 
-        def _resolve_dataset_metric(dataset_label: Optional[str], raw_source: str) -> SegMetric:
-            name_key = (dataset_label or raw_source or "unknown").strip().lower()
+        def _resolve_dataset_metric(dataset_label: Optional[str],
+                                    raw_source: str,
+                                    clip_id: Optional[str]) -> SegMetric:
+            label = (dataset_label or raw_source or "unknown").strip()
+            name_key = label.lower()
             if name_key not in dataset_seg_metrics:
-                dataset_seg_metrics[name_key] = SegMetric(config.num_classes)
+                token_ids = _lookup_dataset_token_ids(dataset_label or raw_source, clip_id)
+                dataset_seg_metrics[name_key] = SegMetric(config.num_classes, valid_classes=token_ids or None)
+                dataset_seg_labels[name_key] = label
             return dataset_seg_metrics[name_key]
 
     def _process_validation_batch(batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
@@ -1229,6 +1235,7 @@ def validate_and_visualize(model: torch.nn.Module,
             outputs = model(input_img, task='seg')
             pred = outputs['seg']
             dataset_names = batch.get("dataset_name", None)
+            clip_ids = batch.get("clip_id", None)
 
             ignore_idx = 255
             valid_class_mask = (target_gt >= 0) & (target_gt < config.num_classes)
@@ -1248,6 +1255,12 @@ def validate_and_visualize(model: torch.nn.Module,
                 mapped = alias_map.get(str(raw_type).lower(), None)
                 source_type = mapped if mapped is not None else ("combined" if raw_type not in seg_metrics else raw_type)
 
+                dataset_raw = None
+                if dataset_names and j < len(dataset_names):
+                    dataset_raw = dataset_names[j]
+                dataset_label = str(dataset_raw) if dataset_raw is not None else str(raw_type)
+                clip_id = clip_ids[j] if clip_ids and j < len(clip_ids) else None
+
                 if source_type not in seg_metrics:
                     logger.warning(f"Unknown source_type '{raw_type}' encountered during seg validation. Falling back to 'combined'.")
                     source_type = "combined"
@@ -1256,6 +1269,9 @@ def validate_and_visualize(model: torch.nn.Module,
                 seg_metrics[source_type].update(sanitized_target[j].unsqueeze(0), pred_labels[j].unsqueeze(0), batch_loss=per_sample_loss)
                 if source_type != "combined":
                     seg_metrics["combined"].update(sanitized_target[j].unsqueeze(0), pred_labels[j].unsqueeze(0), batch_loss=per_sample_loss)
+
+                dataset_metric = _resolve_dataset_metric(dataset_label, raw_type, clip_id)
+                dataset_metric.update(sanitized_target[j].unsqueeze(0), pred_labels[j].unsqueeze(0), batch_loss=per_sample_loss)
 
                 if tb_seg_samples is not None:
                     display_name = _sanitize_name(raw_type)
@@ -1269,12 +1285,6 @@ def validate_and_visualize(model: torch.nn.Module,
                         }
 
                 if seg_visual_samples is not None:
-                    dataset_raw = None
-                    if dataset_names and j < len(dataset_names):
-                        dataset_raw = dataset_names[j]
-                    if dataset_raw is None:
-                        dataset_raw = raw_type
-                    dataset_label = str(dataset_raw)
                     dataset_key = _sanitize_name(dataset_label) or "unknown"
                     entry = seg_visual_samples.setdefault(dataset_key, {"label": dataset_label, "samples": []})
                     if len(entry["samples"]) < 3:
@@ -1337,6 +1347,25 @@ def validate_and_visualize(model: torch.nn.Module,
         camera_metrics_by_dataset = merged_camera_metrics
     elif task_type == 'seg' and dist.is_initialized() and world_size > 1:
         for metric_calc in seg_metrics.values():
+            dist.all_reduce(metric_calc.confusion_matrix, op=dist.ReduceOp.SUM)
+
+            total_loss_tensor_tmp = torch.tensor(metric_calc.total_loss, device='cuda')
+            dist.all_reduce(total_loss_tensor_tmp, op=dist.ReduceOp.SUM)
+            metric_calc.total_loss = total_loss_tensor_tmp.item()
+
+            batch_tensor_tmp = torch.tensor(metric_calc.number_of_batches, device='cuda')
+            dist.all_reduce(batch_tensor_tmp, op=dist.ReduceOp.SUM)
+            metric_calc.number_of_batches = batch_tensor_tmp.item()
+
+            total_pixels_tensor_tmp = torch.tensor(metric_calc.total_pixels, device='cuda')
+            dist.all_reduce(total_pixels_tensor_tmp, op=dist.ReduceOp.SUM)
+            metric_calc.total_pixels = total_pixels_tensor_tmp.item()
+
+            correct_pixels_tensor_tmp = torch.tensor(metric_calc.correct_pixels, device='cuda')
+            dist.all_reduce(correct_pixels_tensor_tmp, op=dist.ReduceOp.SUM)
+            metric_calc.correct_pixels = correct_pixels_tensor_tmp.item()
+
+        for metric_calc in dataset_seg_metrics.values():
             dist.all_reduce(metric_calc.confusion_matrix, op=dist.ReduceOp.SUM)
 
             total_loss_tensor_tmp = torch.tensor(metric_calc.total_loss, device='cuda')
@@ -1559,22 +1588,47 @@ def validate_and_visualize(model: torch.nn.Module,
                 _export_depth_visuals(depth_visual_samples, config.save_path, epoch + 1, logger)
 
         elif task_type == 'seg':
-            seg_metrics_payload: Dict[str, Dict[str, float]] = {}
+            domain_payload: Dict[str, Dict[str, float]] = {}
+            dataset_payload: Dict[str, Dict[str, float]] = {}
+
             for name, metric_calc in seg_metrics.items():
                 seg_scores = metric_calc.get_scores()
                 all_metrics[name] = seg_scores
-                seg_metrics_payload[name] = {
+                domain_payload[name] = {
                     k: float(v)
                     for k, v in seg_scores.items()
                     if isinstance(v, (int, float)) and not (isinstance(v, float) and np.isnan(v))
                 }
                 display_name = _sanitize_name(name) or name
-                logger.info(f"[Dataset:{display_name}] Seg Validation Epoch {epoch} - mIoU: {seg_scores.get('miou', 0):.4f}, mDice: {seg_scores.get('mdice', 0):.4f}")
-                for k, v in seg_scores.items():
-                    if isinstance(v, (int, float)) and not np.isnan(v):
-                        writer.add_scalar(f'Metrics/Seg_Dataset/{display_name}/{k}', v, epoch)
+                logger.info(f"[Domain:{display_name}] Seg Validation Epoch {epoch} - mIoU: {seg_scores.get('miou', 0):.4f}, mDice: {seg_scores.get('mdice', 0):.4f}")
                 logger.info(f"    Overall Accuracy: {seg_scores.get('acc_overall', 0):.4f}, Mean IoU: {seg_scores.get('miou', 0):.4f}")
-            _persist_segmentation_metrics(config.save_path, epoch, seg_metrics_payload, logger)
+                if writer is not None:
+                    for k, v in seg_scores.items():
+                        if isinstance(v, (int, float)) and not np.isnan(v):
+                            writer.add_scalar(f'Metrics/Seg_Domain/{display_name}/{k}', v, epoch)
+
+            if dataset_seg_metrics:
+                for key, metric_calc in dataset_seg_metrics.items():
+                    label = dataset_seg_labels.get(key, key)
+                    seg_scores = metric_calc.get_scores()
+                    dataset_payload[label] = {
+                        k: float(v)
+                        for k, v in seg_scores.items()
+                        if isinstance(v, (int, float)) and not (isinstance(v, float) and np.isnan(v))
+                    }
+                    safe_label = _sanitize_name(label) or label
+                    logger.info(f"[Dataset:{label}] Seg Validation Epoch {epoch} - mIoU: {seg_scores.get('miou', 0):.4f}, mDice: {seg_scores.get('mdice', 0):.4f}")
+                    logger.info(f"    Overall Accuracy: {seg_scores.get('acc_overall', 0):.4f}, Mean IoU: {seg_scores.get('miou', 0):.4f}")
+                    if writer is not None:
+                        for k, v in seg_scores.items():
+                            if isinstance(v, (int, float)) and not np.isnan(v):
+                                writer.add_scalar(f'Metrics/Seg_Dataset/{safe_label}/{k}', v, epoch)
+
+            payload = {"domains": domain_payload}
+            if dataset_payload:
+                payload["datasets"] = dataset_payload
+                all_metrics['datasets'] = dataset_payload
+            _persist_segmentation_metrics(config.save_path, epoch, payload, logger)
 
             if tb_seg_samples and logger is not None:
                 logger.debug("[Validation] 分割样本已生成，按要求跳过 TensorBoard 记录。")
