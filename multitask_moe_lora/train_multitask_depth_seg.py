@@ -14,6 +14,7 @@ from multitask_moe_lora.util.trainer import MultiTaskTrainer
 from multitask_moe_lora.util.validation import run_initial_evaluation, run_epoch_validation
 from multitask_moe_lora.util.checkpoint_manager import CheckpointManager
 from multitask_moe_lora.util.training_loop import run_training_loop
+from multitask_moe_lora.util.backbone_compat import ensure_backbone_extra_token_support
 import os as _os
 _tmpdir = _os.environ.get("TMPDIR") or "/data/ziyi/tmp"
 try:
@@ -88,6 +89,7 @@ def main():
         config.train_steps_per_epoch = steps_per_epoch
         
         # 6. 设置模型、优化器和调度器
+        ensure_backbone_extra_token_support(logger)
         setup_bundle = setup_complete_model(config, logger)
         model = setup_bundle["model"]
         optimizer_depth = setup_bundle["optimizer_depth"]

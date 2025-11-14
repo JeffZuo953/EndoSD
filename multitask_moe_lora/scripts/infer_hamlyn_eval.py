@@ -19,8 +19,6 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
-import importlib
-import inspect
 
 import numpy as np
 import torch
@@ -41,6 +39,7 @@ from multitask_moe_lora.util.model_setup import (  # noqa: E402
     create_and_setup_model,
     load_weights_from_checkpoint,
 )
+from multitask_moe_lora.util.backbone_compat import ensure_backbone_extra_token_support  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
@@ -177,54 +176,9 @@ def _resolve_device_ids(args: argparse.Namespace) -> List[int]:
     return ids
 
 
-def _ensure_backbone_extra_token_support(logger: logging.Logger) -> None:
-    def _patch_module(module) -> None:
-        cls = getattr(module, "DinoVisionTransformer", None)
-        if cls is None or getattr(cls, "_extra_token_compat_patched", False):
-            return
-        method = getattr(cls, "get_intermediate_layers", None)
-        if method is None:
-            return
-        try:
-            signature = inspect.signature(method)
-        except (TypeError, ValueError):
-            setattr(cls, "_extra_token_compat_patched", True)
-            return
-        if "extra_tokens" in signature.parameters:
-            setattr(cls, "_extra_token_compat_patched", True)
-            return
-        original = method
-
-        def wrapper(self, *args, **kwargs):
-            kwargs.pop("extra_tokens", None)
-            return original(self, *args, **kwargs)
-
-        wrapper.__name__ = original.__name__
-        wrapper.__doc__ = original.__doc__
-        setattr(cls, "get_intermediate_layers", wrapper)
-        setattr(cls, "_extra_token_compat_patched", True)
-        logger.warning("Patched %s.get_intermediate_layers 以忽略多余的 extra_tokens 参数。", cls.__name__)
-
-    module_names = [
-        "depth_anything_v2.dinov2",
-        "depth_anything_v2.dinov3",
-        "multitask_moe_lora.depth_anything_v2.dinov2",
-        "multitask_moe_lora.depth_anything_v2.dinov3",
-    ]
-    for name in module_names:
-        try:
-            module = importlib.import_module(name)
-        except ModuleNotFoundError:
-            continue
-        except Exception as exc:  # pragma: no cover
-            print(f"[WARN] 导入 {name} 失败：{exc}")
-            continue
-        _patch_module(module)
-
-
 def _prepare_model(config: TrainingConfig, logger: logging.Logger, device_ids: Sequence[int]) -> torch.nn.Module:
     torch.cuda.set_device(device_ids[0])
-    _ensure_backbone_extra_token_support(logger)
+    ensure_backbone_extra_token_support(logger)
     model = create_and_setup_model(config, logger)
     if len(device_ids) > 1:
         logger.info("使用 DataParallel，设备：%s", ",".join(map(str, device_ids)))
