@@ -64,6 +64,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--save-depth", action="store_true", help="导出深度 npz")
     parser.add_argument("--save-seg", action="store_true", help="导出分割 PNG/npz")
     parser.add_argument("--seg-format", choices=["png", "npz", "both"], default="png", help="分割结果保存格式")
+    parser.add_argument(
+        "--seg-allowed-classes",
+        default="",
+        help="限制分割输出的类别（逗号分隔整数，如 '0,1,2,3,6'；留空则不过滤）",
+    )
     parser.add_argument("--semantic-token-count", type=int, default=0, help="语义 token 数（mode=mtoat/endounid 时生效）")
     parser.add_argument("--use-semantic-tokens", action="store_true", help="强制启用语义 token")
     parser.add_argument("--cuda-devices", default=None, help="设置 CUDA_VISIBLE_DEVICES（例如 0,1）")
@@ -101,6 +106,19 @@ def _parse_name_list(raw_value: Optional[str]) -> Optional[List[str]]:
         return None
     entries = [item.strip() for item in raw_value.split(",") if item.strip()]
     return entries or None
+
+
+def _parse_int_list(raw_value: Optional[str]) -> Optional[List[int]]:
+    entries = _parse_name_list(raw_value)
+    if not entries:
+        return None
+    result: List[int] = []
+    for token in entries:
+        try:
+            result.append(int(token, 0))
+        except ValueError as exc:
+            raise ValueError(f"无法解析分割类别 '{token}' 为整数") from exc
+    return result or None
 
 
 def _build_collate_with_meta(stride: int):
@@ -357,6 +375,11 @@ def _run_seg_inference(model: torch.nn.Module,
             pred = logits.argmax(dim=1)
             for idx in range(pred.size(0)):
                 seg_map = pred[idx].detach().cpu().numpy().astype(np.uint16)
+                if args.seg_allowed_classes:
+                    allowed = np.array(args.seg_allowed_classes, dtype=np.uint16)
+                    invalid_mask = ~np.isin(seg_map, allowed)
+                    if invalid_mask.any():
+                        seg_map[invalid_mask] = 0
                 rel_base = _derive_relative_path(batch["meta"][idx], dataset_tokens)
                 if save_png:
                     if _save_seg_png(seg_map, (out_dir_png / f"{rel_base}.png"), args.skip_existing):
@@ -380,6 +403,7 @@ def main():
     tasks = {token.strip().lower() for token in args.tasks.split(",")}
     args.save_depth = args.save_depth or ("depth" in tasks)
     args.save_seg = args.save_seg or ("seg" in tasks)
+    args.seg_allowed_classes = _parse_int_list(args.seg_allowed_classes)
 
     config = _prepare_config(args, logger)
     train_depth_dataset, val_depth_dataset, train_seg_dataset, val_seg_dataset = create_datasets(config)
