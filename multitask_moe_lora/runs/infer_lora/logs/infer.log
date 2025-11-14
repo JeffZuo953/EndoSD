@@ -1,0 +1,64 @@
+[2025-11-14 00:37:56][ INFO] Config prepared: dataset=ls_bundle, include=['EndoVis2017']
+[2025-11-14 00:37:56][WARNING] Patched DinoVisionTransformer.get_intermediate_layers to ignore unsupported `extra_tokens` kwarg.
+[2025-11-14 00:37:56][WARNING] Patched DinoVisionTransformer.get_intermediate_layers to ignore unsupported `extra_tokens` kwarg.
+[2025-11-14 00:37:56][WARNING] Patched DinoVisionTransformer.get_intermediate_layers to ignore unsupported `extra_tokens` kwarg.
+[2025-11-14 00:37:56][WARNING] Patched DinoVisionTransformer.get_intermediate_layers to ignore unsupported `extra_tokens` kwarg.
+[2025-11-14 00:37:57][ INFO] Not in a distributed environment. Loading model to cuda:0.
+[2025-11-14 00:37:57][ INFO] Using DataParallel on devices: [0, 1, 2, 3, 4]
+[2025-11-14 00:37:57][ INFO] Loading weights from checkpoint: /data/ziyi/multitask/save/train_lora/multitask_LS_vitb_endounid_20251113_181445/checkpoint_best_miou_LS.pth
+[2025-11-14 00:37:57][ INFO] Config mode: endounid, model.use_lora=True, is_lora_mode=True
+[2025-11-14 00:37:57][ INFO] --- Original Checkpoint Attention Keys (blocks.0.attn) ---
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.proj.adapters.shared.lora_a
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.proj.adapters.shared.lora_b
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.proj.linear.bias
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.proj.linear.weight
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.qkv.adapters.shared.lora_a
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.qkv.adapters.shared.lora_b
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.qkv.linear.bias
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.qkv.linear.weight
+[2025-11-14 00:37:57][ INFO] --- Model Attention Keys (blocks.0.attn) ---
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.proj.adapters.shared.lora_a
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.proj.adapters.shared.lora_b
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.proj.linear.bias
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.proj.linear.weight
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.qkv.adapters.shared.lora_a
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.qkv.adapters.shared.lora_b
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.qkv.linear.bias
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.0.attn.qkv.linear.weight
+[2025-11-14 00:37:57][ INFO] ---------------------------------
+[2025-11-14 00:37:57][ INFO] [LoRA mode] Already has .linear.: backbone.blocks.0.attn.qkv.linear.weight
+[2025-11-14 00:37:57][ INFO] [MATCHED] backbone.blocks.0.attn.qkv.linear.weight -> backbone.blocks.0.attn.qkv.linear.weight
+[2025-11-14 00:37:57][ INFO] [LoRA mode] Already has .linear.: backbone.blocks.0.attn.qkv.linear.bias
+[2025-11-14 00:37:57][ INFO] [MATCHED] backbone.blocks.0.attn.qkv.linear.bias -> backbone.blocks.0.attn.qkv.linear.bias
+[2025-11-14 00:37:57][ INFO] [LoRA mode] Adding .linear.: backbone.blocks.0.attn.qkv.adapters.shared.lora_a -> backbone.blocks.0.attn.qkv.adapters.shared.lora_a
+[2025-11-14 00:37:57][ INFO] [MATCHED] backbone.blocks.0.attn.qkv.adapters.shared.lora_a -> backbone.blocks.0.attn.qkv.adapters.shared.lora_a
+[2025-11-14 00:37:57][ INFO] [LoRA mode] Adding .linear.: backbone.blocks.0.attn.qkv.adapters.shared.lora_b -> backbone.blocks.0.attn.qkv.adapters.shared.lora_b
+[2025-11-14 00:37:57][ INFO] [MATCHED] backbone.blocks.0.attn.qkv.adapters.shared.lora_b -> backbone.blocks.0.attn.qkv.adapters.shared.lora_b
+[2025-11-14 00:37:57][ INFO] [LoRA mode] Already has .linear.: backbone.blocks.0.attn.proj.linear.weight
+[2025-11-14 00:37:57][ INFO] [MATCHED] backbone.blocks.0.attn.proj.linear.weight -> backbone.blocks.0.attn.proj.linear.weight
+[2025-11-14 00:37:57][ INFO] [LoRA mode] Already has .linear.: backbone.blocks.0.attn.proj.linear.bias
+[2025-11-14 00:37:57][ INFO] [MATCHED] backbone.blocks.0.attn.proj.linear.bias -> backbone.blocks.0.attn.proj.linear.bias
+[2025-11-14 00:37:57][ INFO] [LoRA mode] Adding .linear.: backbone.blocks.0.attn.proj.adapters.shared.lora_a -> backbone.blocks.0.attn.proj.adapters.shared.lora_a
+[2025-11-14 00:37:57][ INFO] [MATCHED] backbone.blocks.0.attn.proj.adapters.shared.lora_a -> backbone.blocks.0.attn.proj.adapters.shared.lora_a
+[2025-11-14 00:37:57][ INFO] [LoRA mode] Adding .linear.: backbone.blocks.0.attn.proj.adapters.shared.lora_b -> backbone.blocks.0.attn.proj.adapters.shared.lora_b
+[2025-11-14 00:37:57][ INFO] [MATCHED] backbone.blocks.0.attn.proj.adapters.shared.lora_b -> backbone.blocks.0.attn.proj.adapters.shared.lora_b
+[2025-11-14 00:37:57][ INFO] --- Checkpoint Keys (first 5) ---
+[2025-11-14 00:37:57][ INFO]   - backbone.cls_token
+[2025-11-14 00:37:57][ INFO]   - backbone.pos_embed
+[2025-11-14 00:37:57][ INFO]   - backbone.mask_token
+[2025-11-14 00:37:57][ INFO]   - backbone.patch_embed.proj.weight
+[2025-11-14 00:37:57][ INFO]   - backbone.patch_embed.proj.bias
+[2025-11-14 00:37:57][ INFO] --- Model Keys (first 5) ---
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.5.attn.qkv.adapters.depth.lora_b
+[2025-11-14 00:37:57][ INFO]   - depth_head.scratch.refinenet4.resConfUnit2.conv1.weight
+[2025-11-14 00:37:57][ INFO]   - backbone.blocks.8.attn.qkv.adapters.depth.lora_b
+[2025-11-14 00:37:57][ INFO]   - seg_head.fuse.1.num_batches_tracked
+[2025-11-14 00:37:57][ INFO]   - seg_head.projections.1.0.weight
+[2025-11-14 00:37:57][ INFO] ---------------------------------
+[2025-11-14 00:37:57][ INFO] Successfully loaded 399 parameters.
+[2025-11-14 00:37:57][ INFO] Skipped 0 parameters (non-matching or excluded).
+[2025-11-14 00:37:57][ INFO] Initialized 0 new parameters (not found in checkpoint or skipped).
+[2025-11-14 00:37:57][ INFO] Only model weights loaded. Optimizer, scheduler, and epoch are not restored.
+[2025-11-14 00:38:18][ INFO] Depth inference完成，保存 600 个文件 (root=/data/ziyi/result/infer_endovis2017_eval_sf_miou/depth)
+[2025-11-14 00:38:44][ INFO] Seg inference完成，保存 1200 个文件 (root=/data/ziyi/result/infer_endovis2017_eval_sf_miou)
+[2025-11-14 00:38:44][ INFO] LoRA 多任务推理完成。输出目录: /data/ziyi/result/infer_endovis2017_eval_sf_miou

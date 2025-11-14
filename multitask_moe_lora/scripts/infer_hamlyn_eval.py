@@ -55,8 +55,12 @@ def _parse_args() -> argparse.Namespace:
                         help="推理结果与指标输出目录")
     parser.add_argument("--left-token", default="image01",
                         help="仅保留包含该关键字的行（用于选择左目 image01）")
-    parser.add_argument("--batch-size", type=int, default=4, help="推理 batch size")
+    parser.add_argument("--batch-size", type=int, default=4, help="推理 batch size（总 batch）")
+    parser.add_argument("--per-gpu-batch", type=int, default=None,
+                        help="若指定，则总 batch size=per_gpu_batch*GPU 数；否则使用 --batch-size")
     parser.add_argument("--num-workers", type=int, default=8, help="DataLoader workers 数量")
+    parser.add_argument("--workers-per-gpu", type=int, default=None,
+                        help="若指定，则 DataLoader workers=workers_per_gpu*GPU 数；否则使用 --num-workers")
     parser.add_argument("--img-size", type=int, default=518, help="模型输入尺寸（wxh）")
     parser.add_argument("--max-depth", type=float, default=0.3, help="深度上限（m）")
     parser.add_argument("--min-depth", type=float, default=1e-3, help="深度下限（m）")
@@ -99,7 +103,11 @@ def _setup_logger(output_root: Path) -> logging.Logger:
     return logger
 
 
-def _filter_filelist(filelist_path: str, keyword: str, work_dir: Path, logger: logging.Logger) -> Path:
+def _filter_filelist(filelist_path: str,
+                     keyword: str,
+                     work_dir: Path,
+                     logger: logging.Logger,
+                     root_override: Optional[str] = None) -> Path:
     src = Path(os.path.expanduser(filelist_path))
     if not src.is_file():
         raise FileNotFoundError(f"filelist 不存在: {src}")
@@ -109,10 +117,34 @@ def _filter_filelist(filelist_path: str, keyword: str, work_dir: Path, logger: l
     if not filtered:
         raise ValueError(f"filelist {src} 中未找到包含 '{keyword}' 的行，无法锁定左目样本。")
     dst = work_dir / f"hamlyn_{keyword}_filelist.txt"
+    if root_override:
+        root_path = Path(os.path.expanduser(root_override)).resolve()
+    else:
+        root_path = None
+    rewritten = []
+    override_hits = 0
+    for entry in filtered:
+        if root_path is None:
+            rewritten.append(entry)
+            continue
+        parts = entry.rsplit(" ", 1)
+        if len(parts) != 2:
+            rewritten.append(entry)
+            continue
+        base_path, frame_token = parts
+        seq_name = Path(base_path).name
+        candidate = root_path / seq_name
+        if candidate.exists():
+            rewritten.append(f"{candidate.as_posix()} {frame_token}")
+            override_hits += 1
+        else:
+            rewritten.append(entry)
     with dst.open("w") as f:
-        f.write("\n".join(filtered))
+        f.write("\n".join(rewritten))
     logger.info("筛选 filelist：%s -> %s，保留 %d / %d 行（关键字：%s）",
                 src, dst, len(filtered), len(lines), keyword)
+    if override_hits > 0:
+        logger.info("  有 %d 行的基路径重定向至 %s", override_hits, root_path)
     return dst
 
 
@@ -362,7 +394,13 @@ def main() -> None:
     args = _parse_args()
     output_root = Path(os.path.expanduser(args.output_root)).resolve()
     logger = _setup_logger(output_root)
-    filtered_filelist = _filter_filelist(args.filelist, args.left_token, output_root, logger)
+    filtered_filelist = _filter_filelist(
+        args.filelist,
+        args.left_token,
+        output_root,
+        logger,
+        root_override=args.root,
+    )
 
     stride = 16 if "dinov3" in args.encoder.lower() else 14
     collate = _build_collate_with_meta(stride)
@@ -375,11 +413,31 @@ def main() -> None:
         min_depth=args.min_depth,
         local_cache_dir=args.local_cache_dir,
     )
+
+    device_ids = _resolve_device_ids(args)
+    num_devices = max(1, len(device_ids))
+    effective_bs = args.batch_size
+    if args.per_gpu_batch is not None:
+        effective_bs = args.per_gpu_batch * num_devices
+        logger.info("按 GPU 自动扩展 batch size：%d (per GPU) x %d (GPU) = %d",
+                    args.per_gpu_batch, num_devices, effective_bs)
+    if effective_bs <= 0:
+        raise ValueError("Batch size 必须为正数。")
+
+    effective_workers = args.num_workers
+    if args.workers_per_gpu is not None:
+        effective_workers = max(1, args.workers_per_gpu * num_devices)
+        logger.info("按 GPU 自动扩展 DataLoader workers：%d (per GPU) x %d (GPU) = %d",
+                    args.workers_per_gpu, num_devices, effective_workers)
+
+    args.batch_size = effective_bs
+    args.num_workers = effective_workers
+
     loader = DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=effective_bs,
         shuffle=False,
-        num_workers=args.num_workers,
+        num_workers=effective_workers,
         pin_memory=True,
         drop_last=False,
         collate_fn=collate,
@@ -387,7 +445,6 @@ def main() -> None:
     logger.info("Hamlyn 数据集加载完成，共 %d 张左目图像。", len(dataset))
 
     config = _prepare_config(args, output_root)
-    device_ids = _resolve_device_ids(args)
     model = _prepare_model(config, logger, device_ids)
 
     metrics = _run_inference_and_eval(model, loader, config, output_root, args, logger)
